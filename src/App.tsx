@@ -18,6 +18,7 @@ import { GameScreen } from './ui/screens/Game';
 export default function App() {
   const screen = useStore((s) => s.screen);
   const settings = useStore((s) => s.profile.settings);
+  const matchKey = useStore((s) => s.matchKey);
 
   useEffect(() => {
     sound.sfxOn = settings.sfx;
@@ -48,7 +49,7 @@ export default function App() {
         {screen === 'challenges' && <ChallengesScreen />}
         {screen === 'progress' && <ProgressScreen />}
         {screen === 'settings' && <SettingsScreen />}
-        {screen === 'match' && <GameScreen />}
+        {screen === 'match' && <GameScreen key={matchKey} />}
       </div>
       <Toasts />
     </div>

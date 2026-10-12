@@ -36,6 +36,7 @@ export function launchMatch(setup: Omit<MatchSetup, 'profile' | 'bag'>) {
     return;
   }
   pendingMatch = { ...setup, profile: st.profile, bag: bagFromProfile(st.profile) };
+  useStore.setState({ matchKey: st.matchKey + 1 });
   st.go('match');
 }
 

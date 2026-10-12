@@ -32,6 +32,8 @@ interface StoreState {
   screenParam?: string;
   toasts: Toast[];
   saveError: string | null;
+  /** bumps whenever a new match starts so the game screen remounts */
+  matchKey: number;
   go: (s: Screen, param?: string) => void;
   toast: (text: string, kind?: Toast['kind'], icon?: string) => void;
   dismissToast: (id: number) => void;
@@ -58,6 +60,7 @@ export const useStore = create<StoreState>((set, get) => ({
   screen: 'menu',
   toasts: initial.warning ? [{ id: toastId++, text: initial.warning, kind: 'bad' }] : [],
   saveError: null,
+  matchKey: 0,
   go: (screen, screenParam) => set({ screen, screenParam }),
   toast: (text, kind = 'info', icon) => {
     const id = toastId++;

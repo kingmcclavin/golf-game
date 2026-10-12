@@ -77,8 +77,6 @@ export function GameScreen() {
     const s = ctl.setup;
     ctl.dispose();
     launchMatch({ courseId: s.courseId, length: s.length, difficulty: s.difficulty, opponents: s.opponents.length ? pickOpponents(s.difficulty, s.opponents.length) : [] });
-    go('menu');
-    setTimeout(() => useStore.getState().go('match'), 30);
   };
 
   return (

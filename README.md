@@ -152,7 +152,7 @@ Distances are yards along the centre line, lateral offsets in yards (+ = right).
 
 ## Testing
 
-* `npm test` runs 30+ tests: physics (calibration, power→distance, slopes and resting, cup capture and lip-outs, water drop, OOB, bunkers, wind, mistiming), validity of all 72 hole layouts, bots finishing every hole of every course from real simulated shots, experts beating beginners, statistical verification of pack odds, duplicate/upgrade rules, bag rules, spending limits, rewards, achievements, XP, save round-trips, v1→v2 migration and repair of corrupted saves. The bot tests take a couple of minutes.
+* `npm test` runs 28 tests: physics (calibration, power→distance, slopes and resting, cup capture and lip-outs, water drop, OOB, bunkers, wind, mistiming), validity of all 72 hole layouts, bots finishing every hole of every course from real simulated shots, experts beating beginners, statistical verification of pack odds, duplicate/upgrade rules, bag rules, spending limits, rewards, achievements, XP, save round-trips, v1→v2 migration and repair of corrupted saves. The bot tests take a couple of minutes.
 * `npm run e2e` (after `npm run build` and `npx vite preview --port 4173`) drives headless Chromium. It plays a full 3-hole match against a bot through the real UI controller, checks rewards and persistence after a reload, buys and opens a pack, buys and equips a cosmetic, then performs real touch pull-and-release swings in iPhone- and iPad-sized viewports, saving screenshots to `screenshots/`. Set `CHROME=/path/to/chrome` if Chromium is elsewhere.
 
 ## Known limitations
