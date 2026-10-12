@@ -220,8 +220,9 @@ h1, h2, h3 { font-family: var(--display); margin: 0; line-height: 1.05; }
 .swing-pad.disabled { opacity: 0.4; }
 .pad-ring { position: absolute; inset: 0; border-radius: 50%; border: 3px dashed rgba(255,255,255,0.35); animation: spin 12s linear infinite; }
 .meter { position: absolute; pointer-events: none; }
-.power-bar { width: 22px; height: 210px; border-radius: 99px; background: rgba(6, 24, 26, 0.86); border: 2px solid var(--line); position: relative; overflow: hidden; }
+.power-bar { width: 22px; height: 210px; border-radius: 99px; background: rgba(6, 24, 26, 0.86); border: 2px solid var(--line); position: relative; overflow: visible; }
 .power-bar .fill { position: absolute; left: 0; right: 0; bottom: 0; border-radius: 99px; background: linear-gradient(0deg, #4cd17a, #ffd23a 75%, #ff5a5a); }
+.power-bar .suggest { position: absolute; left: -2px; right: -2px; height: 4px; background: #7ad8ff; box-shadow: 0 0 6px #7ad8ff; border-radius: 2px; }
 .power-bar .over { position: absolute; left: 0; right: 0; height: 2px; background: #fff; }
 .needle-arc { position: absolute; width: 230px; height: 120px; }
 .hud-center-msg { position: absolute; left: 50%; top: 22%; transform: translateX(-50%); text-align: center; pointer-events: none; }
@@ -272,11 +273,18 @@ h1, h2, h3 { font-family: var(--display); margin: 0; line-height: 1.05; }
   .char-stage { min-height: 38vh; }
 }
 @media (max-height: 520px) {
+  .menu-left { justify-content: flex-start; overflow-y: auto; padding-bottom: 8px; touch-action: pan-y; }
+  .menu-right { justify-content: flex-start; overflow-y: auto; touch-action: pan-y; }
+  .menu-right .quick-card { padding: 10px 12px; }
+  .logo span { display: inline; margin-left: 10px; }
+  .ability-chip { font-size: 11px; max-width: 250px; padding: 4px 8px; }
+  .info-chip { font-size: 12px; padding: 3px 8px; }
+  .needle-wrap { transform: scale(0.8); transform-origin: bottom right; }
   .screen-head h2 { font-size: 22px; }
   .play-btn { min-height: 58px; font-size: 24px; }
   .menu-tile { padding: 8px 10px; font-size: 15px; }
   .menu-tile .ico { font-size: 19px; }
-  .logo { font-size: 36px; }
+  .logo { font-size: 32px; }
   .menu-grid { gap: 6px; }
   .power-bar { height: 150px; }
   .swing-pad { width: 108px; height: 108px; }

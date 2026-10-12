@@ -133,7 +133,7 @@ await page.screenshot({ path: `${OUT}/10-bag.png` });
 await page.locator('button[aria-label=Back]').click();
 
 // ---- cosmetics shop
-await page.getByText('Shop', { exact: true }).click();
+await page.locator('.menu-tile', { hasText: 'Shop' }).click();
 await page.waitForTimeout(1200);
 await page.locator('.item').first().click();
 await page.waitForTimeout(500);

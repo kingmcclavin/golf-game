@@ -74,7 +74,21 @@ export interface PackReward {
   rarity: Rarity;
 }
 
-export function openPack(p: PackDef, rand: () => number, now = new Date()): PackReward[] {
+/** Within a rarity, clubs you don't own yet are this many times more likely than duplicates. */
+export const NEW_CLUB_WEIGHT = 3;
+
+function pickWeighted(pool: ClubDef[], owned: Set<string>, rand: () => number): ClubDef {
+  const w = pool.map((c) => (owned.has(c.id) ? 1 : NEW_CLUB_WEIGHT));
+  const total = w.reduce((a, b) => a + b, 0);
+  let r = rand() * total;
+  for (let i = 0; i < pool.length; i++) {
+    r -= w[i];
+    if (r < 0) return pool[i];
+  }
+  return pool[pool.length - 1];
+}
+
+export function openPack(p: PackDef, rand: () => number, now = new Date(), owned: Set<string> = new Set()): PackReward[] {
   const out: PackReward[] = [];
   const ev = p.event ? currentEvent(now) : null;
   for (let i = 0; i < p.clubs; i++) {
@@ -87,8 +101,7 @@ export function openPack(p: PackDef, rand: () => number, now = new Date()): Pack
       }
     }
     const rarity = rollRarity(p, rand);
-    const pool = poolFor(rarity);
-    const club = pool[Math.floor(rand() * pool.length)];
+    const club = pickWeighted(poolFor(rarity), owned, rand);
     out.push({ type: 'club', club, rarity });
   }
   if (ev && rand() * 100 < (p.cosmeticChance ?? 0)) {

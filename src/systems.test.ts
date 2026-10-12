@@ -39,6 +39,19 @@ describe('club packs', () => {
     }
   });
 
+  it('favours unowned clubs within a rarity without changing rarity odds', () => {
+    const rng = new RNG(9);
+    const owned = new Set(poolFor('common').slice(0, 5).map((c) => c.id));
+    let ownedHits = 0, total = 0;
+    for (let i = 0; i < 20000; i++) {
+      const [r] = openPack(PACKS[0], () => rng.next(), new Date(), owned);
+      if (r.rarity === 'common') { total++; if (owned.has(r.club!.id)) ownedHits++; }
+    }
+    const n = poolFor('common').length;
+    const expected = 5 / (5 + (n - 5) * 3);
+    expect(Math.abs(ownedHits / total - expected)).toBeLessThan(0.02);
+  });
+
   it('opens the right number of items and never drops event clubs from normal packs', () => {
     const rng = new RNG(7);
     for (let i = 0; i < 500; i++) {

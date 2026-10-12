@@ -329,7 +329,7 @@ export function buyPack(p: Profile, packId: string, rand: () => number, now = ne
   if (!pack) return { ok: false, reason: 'Unknown pack' };
   if (level(p) < pack.minLevel) return { ok: false, reason: `Requires level ${pack.minLevel}` };
   if (!spend(p, pack.price)) return { ok: false, reason: 'Not enough coins' };
-  const rewards = openPack(pack, rand, now);
+  const rewards = openPack(pack, rand, now, new Set(Object.keys(p.clubs)));
   const grants: GrantResult[] = [];
   let cosmeticDupeCoins = 0;
   for (const r of rewards) {

@@ -33,6 +33,8 @@ export default function App() {
   }, []);
 
   const backdrop = screen !== 'match' && screen !== 'character' && screen !== 'shop';
+  // the menu backdrop is mostly hidden behind full panels on sub-screens: render it less often
+  host.throttle = backdrop && screen !== 'menu' ? 3 : 1;
   return (
     <div className={`app ${screen === 'match' ? 'in-game' : ''}`}>
       {backdrop && <MenuBackdrop />}

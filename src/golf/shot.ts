@@ -45,6 +45,22 @@ export interface ShotPlan {
 
 export const isPutter = (c: ClubRef) => c.def.category === 'putter';
 
+export type ShotType = 'Drive' | 'Fairway wood' | 'Hybrid' | 'Iron' | 'Approach' | 'Pitch' | 'Chip' | 'Sand shot' | 'Recovery' | 'Putt' | 'Texas wedge';
+
+/** Human-readable shot type; chips also change the launch (lower, more roll). */
+export function shotType(club: ClubRef, lie: Surface, carry: number): ShotType {
+  const cat = club.def.category;
+  if (cat === 'putter') return lie === 'green' ? 'Putt' : 'Texas wedge';
+  if (lie === 'bunker') return 'Sand shot';
+  if ((lie === 'deepRough' || lie === 'waste') && cat !== 'wedge') return 'Recovery';
+  if ((cat === 'wedge' || cat === 'iron') && carry < 26) return 'Chip';
+  if (cat === 'wedge' && carry < 65) return 'Pitch';
+  if (cat === 'driver') return lie === 'tee' ? 'Drive' : 'Recovery';
+  if (cat === 'wood') return 'Fairway wood';
+  if (cat === 'hybrid') return 'Hybrid';
+  return carry < 150 ? 'Approach' : 'Iron';
+}
+
 function lieModifiers(club: ClubRef, lie: Surface, slope: number, mods: ShotMods, forg: number) {
   let dist = 1;
   let dir = 1;
@@ -193,8 +209,9 @@ export function planShot(setup: ShotSetup, opt: PlanOptions): ShotPlan {
   const over = Math.max(0, setup.power - 1);
   const targetCarry = Math.max(1, perf.maxCarry * setup.power * lm.dist * mods.carryMul * distFactor * (1 + over * 0.0));
   const trajAdd = setup.traj === 'low' ? -3.5 : setup.traj === 'high' ? 4 : 0;
-  const launchDeg = clamp(perf.launchDeg + trajAdd + mods.launchAdd + lm.launchAdd, 4, 60);
-  const backspin = perf.backspin * mods.backspinMul * lm.spinMul * (setup.traj === 'low' ? 0.8 : setup.traj === 'high' ? 1.15 : 1);
+  const chip = shotType(club, setup.lie, targetCarry) === 'Chip';
+  const launchDeg = clamp((perf.launchDeg + trajAdd + mods.launchAdd + lm.launchAdd) * (chip ? 0.62 : 1), 4, 60);
+  const backspin = perf.backspin * mods.backspinMul * lm.spinMul * (setup.traj === 'low' ? 0.8 : setup.traj === 'high' ? 1.15 : 1) * (chip ? 0.45 : 1);
   const speed = speedForCarry(targetCarry, launchDeg, backspin) * mods.speedMul;
   const sub = SUBTYPES[club.def.subtype];
   const shapeScale = club.def.category === 'wedge' ? 0.5 : sub.cat === 'iron' ? 0.8 : 1;

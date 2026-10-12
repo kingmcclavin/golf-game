@@ -202,7 +202,7 @@ export function buildTerrain(world: HoleWorld, quality: Quality, sunDir: THREE.V
   outer.translate(cx, 0, cz);
   const op = outer.attributes.position as THREE.BufferAttribute;
   const colors = new Float32Array(op.count * 3);
-  const rough = new THREE.Color(t.wasteRough ? t.waste : t.deepRough);
+  const rough = new THREE.Color(t.wasteRough ? t.waste : t.rough).lerp(new THREE.Color(t.deepRough), 0.4);
   const mtn = new THREE.Color(t.mountains);
   const noise = new Noise2(h.seed + 5);
   const tmp = new THREE.Color();
@@ -213,7 +213,8 @@ export function buildTerrain(world: HoleWorld, quality: Quality, sunDir: THREE.V
     const pr = projectOnPath(h.path, h.cum, x, z);
     const far = Math.max(0, pr.dist - h.boundsHalf - 80);
     let y = world.rawHeight(x, z);
-    y += Math.pow(far / 120, 1.6) * (t.lateralRise * 2 + 6) * (0.6 + 0.4 * noise.fbm(x / 300, z / 300, 3));
+    const mtnH = t.id === 'highland' ? 260 : t.id === 'desert' ? 110 : t.id === 'coast' ? 45 : 70;
+    y += Math.pow(Math.min(1.6, far / 1000), 1.5) * mtnH * (0.55 + 0.45 * noise.fbm(x / 300, z / 300, 3)) + Math.min(far, 200) * 0.04 * t.lateralRise;
     if (t.ocean) {
       const sideLat = pr.lateral * t.ocean.side * (h.mirrored ? -1 : 1);
       if (sideLat > t.ocean.offset) y = Math.min(y, OCEAN_LEVEL - 8);

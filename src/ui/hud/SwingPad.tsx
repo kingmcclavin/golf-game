@@ -71,6 +71,7 @@ function PowerMeter() {
   const isPutt = useHud((s) => s.isPutt);
   const puttFeet = useHud((s) => s.puttFeet);
   const preview = useHud((s) => s.preview);
+  const suggest = useHud((s) => s.suggestPower);
   if (!pulling) return null;
   const R = 100;
   const half = Math.PI / 2;
@@ -88,7 +89,7 @@ function PowerMeter() {
   const inPerfect = Math.abs(needle) <= perfectWindow;
   const over = power > 1;
   return (
-    <div className="meter" style={{ right: 'calc(140px + var(--safe-r))', bottom: 'calc(10px + var(--safe-b))', display: 'flex', alignItems: 'flex-end', gap: 10 }}>
+    <div className="meter needle-wrap" style={{ right: 'calc(140px + var(--safe-r))', bottom: 'calc(10px + var(--safe-b))', display: 'flex', alignItems: 'flex-end', gap: 10 }}>
       <div className="col" style={{ alignItems: 'center', gap: 4 }}>
         <svg width={230} height={124} style={{ overflow: 'visible' }}>
           {arc(-1, 1, 'rgba(255,90,90,0.75)')}
@@ -108,6 +109,7 @@ function PowerMeter() {
       <div className="power-bar">
         <div className="fill" style={{ height: `${Math.min(1, power / 1.1) * 100}%` }} />
         <div className="over" style={{ bottom: `${(1 / 1.1) * 100}%` }} />
+        <div className="suggest" style={{ bottom: `${(Math.min(1.1, suggest) / 1.1) * 100}%` }} title="Suggested power to reach the pin" />
       </div>
     </div>
   );

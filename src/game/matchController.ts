@@ -13,7 +13,7 @@ import { Match, type MatchLength, type PlayerState, type ShotReport } from '../g
 import { BALL_R, FRAME_DT, type SimResult } from '../golf/physics';
 import { makeBotPlayer, makePlayer } from '../golf/players';
 import { scoreName } from '../golf/scoring';
-import { executeShot, isPutter, previewShot, swingTuning, type ClubRef, type ShotPlan, type ShotPreview, type ShotSetup, type Trajectory } from '../golf/shot';
+import { executeShot, isPutter, previewShot, shotType, swingTuning, type ClubRef, type ShotPlan, type ShotPreview, type ShotSetup, type Trajectory } from '../golf/shot';
 import { useHud, useSwing, type CamMode, type HudState, type Message, type Phase } from '../state/matchStore';
 import { recordMatch, type Profile } from '../state/profile';
 import { useStore } from '../state/store';
@@ -47,6 +47,7 @@ interface Flight {
 }
 
 let msgId = 1;
+const ROLL_GUESS: Record<string, number> = { driver: 22, wood: 15, hybrid: 9, iron: 5, wedge: 2, putter: 0 };
 
 const COMMENTS = {
   birdie: ['What a birdie!', 'Red number on the card!', 'Lovely stuff.'],
@@ -241,7 +242,8 @@ export class MatchController implements View {
       this.aimYaw = this.defaultAim(pi);
       this.placeGolfer();
       this.setPhase('aim');
-      useHud.setState({ isHumanTurn: true, botThinking: null, message: null, bag: this.bagHud(), camModes: this.camModes() });
+      const prevBot = this.lastReport ? this.match.players[this.lastReport.player].isBot : false;
+      useHud.setState({ isHumanTurn: true, botThinking: null, message: prevBot ? { text: 'Your shot', kind: 'neutral', id: msgId++ } : null, bag: this.bagHud(), camModes: this.camModes() });
       this.hole?.setSlopeArrows(onGreen && this.settings.showSlopeGrid);
       this.refreshAim(true);
     }
@@ -528,6 +530,8 @@ export class MatchController implements View {
       canTraj: this.level >= FEATURE_UNLOCKS.trajectory,
       ...(liePenalty !== undefined ? { liePenalty } : {}),
       isPutt: putt,
+      shotType: shotType(club, p.lie, pv ? pv.carry : 100),
+      suggestPower: putt ? this.suggestPuttPower() : clamp((w.distToPin(p.ball.x, p.ball.z) - ROLL_GUESS[club.def.category]) / clubPerformance(club.def, club.level).maxCarry, 0.05, 1),
       puttFeet: putt ? clubPerformance(club.def, club.level).maxCarry * pw * 3.28 : 0,
     });
   }
@@ -640,7 +644,10 @@ export class MatchController implements View {
         g.react('celebrate');
       }
     } else if (!report.penalty) {
-      sub = `${Math.round(yd(dist))} yd · ${Math.round(yd(this.match.world.distToPin(p.ball.x, p.ball.z)))} yd to pin`;
+      const left = this.match.world.distToPin(p.ball.x, p.ball.z);
+      sub = isPutter(f.setup.club) ? `${Math.round(left * 3.28)} ft left` : `${Math.round(yd(dist))} yd · ${left < 18 ? `${Math.round(left * 3.28)} ft` : `${Math.round(yd(left))} yd`} to pin`;
+      if (f.result.events.some((e) => e.type === 'lip')) { text = 'Lipped out!'; kind = 'bad'; }
+      else if (isPutter(f.setup.club) && left < 1) text = 'Close! Tap-in left';
       if (p.lie === 'green' && f.setup.lie !== 'green') kind = 'good';
     } else {
       g.react('sad');
@@ -775,8 +782,9 @@ export class MatchController implements View {
       const pos = this.balls[f.pi].position;
       const putt2 = isPutter(f.setup.club);
       if (putt2) {
-        this.desPos.copy(new THREE.Vector3(f.setup.ball.x, f.setup.ball.y, f.setup.ball.z)).addScaledVector(f.dir, -3.2).add(new THREE.Vector3(0, 1.8, 0));
-        this.desPos.lerp(pos.clone().addScaledVector(f.dir, -3).add(new THREE.Vector3(0, 1.6, 0)), 0.5);
+        const side = new THREE.Vector3(-f.dir.z, 0, f.dir.x);
+        this.desPos.copy(new THREE.Vector3(f.setup.ball.x, f.setup.ball.y, f.setup.ball.z)).addScaledVector(f.dir, -3.2).addScaledVector(side, 1.3).add(new THREE.Vector3(0, 2.2, 0));
+        this.desPos.lerp(pos.clone().addScaledVector(f.dir, -3).addScaledVector(side, 1.0).add(new THREE.Vector3(0, 1.9, 0)), 0.5);
         this.desLook.copy(pos);
         this.camLerp = 3;
         return;
@@ -868,6 +876,7 @@ export class MatchController implements View {
       this.refreshAim(false);
     }
     if (this.flight) this.updateFlight(dt);
+    this.fpsCheck(dt);
     if (this.phase === 'result') {
       this.resultTimer += dt;
       const p = this.match.players[this.lastReport?.player ?? 0];
@@ -893,6 +902,18 @@ export class MatchController implements View {
     const focus = this.flight ? this.balls[this.flight.pi].position : new THREE.Vector3(this.match.players[this.cur].ball.x, this.match.players[this.cur].ball.y, this.match.players[this.cur].ball.z);
     this.hole.setFocus(focus);
     this.updatePinLabel();
+  }
+
+  private lowFpsT = 0;
+  private fpsWarned = false;
+  private fpsCheck(dt: number) {
+    if (this.fpsWarned || this.quality === 'low') return;
+    if (host.fps < 22) this.lowFpsT += dt;
+    else this.lowFpsT = Math.max(0, this.lowFpsT - dt);
+    if (this.lowFpsT > 6) {
+      this.fpsWarned = true;
+      useStore.getState().toast('The game is running slowly on this device. Try Graphics quality: Low in Settings.', 'bad', '🐢');
+    }
   }
 
   private lastPinText = '';

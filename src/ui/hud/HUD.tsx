@@ -3,7 +3,7 @@ import { sound } from '../../audio/sound';
 import { RARITY_INFO } from '../../data/clubs';
 import type { MatchController } from '../../game/matchController';
 import { fmtRel, scoreClass } from '../../golf/scoring';
-import { useHud } from '../../state/matchStore';
+import { useHud, useSwing } from '../../state/matchStore';
 import { useStore } from '../../state/store';
 import { fmtDist, yd } from '../../core/units';
 import { Coins, Modal, Seg, Toggle } from '../components/common';
@@ -18,6 +18,7 @@ const LIE_LABEL: Record<string, string> = {
 
 export function HUD({ ctl, onQuit, onAgain }: { ctl: MatchController; onQuit: () => void; onAgain: () => void }) {
   const h = useHud();
+  const pulling = useSwing((s) => s.pulling);
   const [paused, setPaused] = useState(false);
   const [clubList, setClubList] = useState(false);
   const [card, setCard] = useState(false);
@@ -76,6 +77,7 @@ export function HUD({ ctl, onQuit, onAgain }: { ctl: MatchController; onQuit: ()
         <div className="hud-left">
           <div className="row wrap" style={{ gap: 6 }}>
             <span className="info-chip">⛳ {fmtDist(h.distToPin)}</span>
+            {h.shotType && <span className="info-chip" style={{ color: '#ffe9a0' }}>{h.shotType}</span>}
             <span className="info-chip">{LIE_LABEL[h.lie]}{h.liePenalty > 0.01 ? ` −${Math.round(h.liePenalty * 100)}%` : ''}</span>
             {Math.abs(h.elevation) > 1 && <span className="info-chip">{h.elevation > 0 ? '▲' : '▼'} {Math.round(Math.abs(h.elevation) * 3.28)} ft</span>}
             {h.preview && !h.isPutt && <span className="info-chip">Carry {Math.round(yd(h.preview.carry))} · Total ~{Math.round(yd(h.preview.total))}</span>}
@@ -113,7 +115,7 @@ export function HUD({ ctl, onQuit, onAgain }: { ctl: MatchController; onQuit: ()
       )}
 
       {/* ---------- aim nudge */}
-      {aiming && (
+      {aiming && !pulling && (
         <div className="pe hud-btns" style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', bottom: 'calc(12px + var(--safe-b))' }}>
           <HoldButton label="◀" onTick={() => ctl.nudgeAim(-0.4)} />
           <span className="info-chip" style={{ alignSelf: 'center' }}>Aim</span>

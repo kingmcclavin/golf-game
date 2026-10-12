@@ -47,7 +47,7 @@ export function PacksScreen() {
       <TopBar title="Club Packs" right={<div className="row" style={{ fontSize: 14 }}><span className="muted">Skip animations</span><Toggle on={fast} onChange={(v) => updateSettings({ fastPacks: v })} /></div>} />
       <div className="screen-body">
         <div className="muted" style={{ fontSize: 14, marginBottom: 10 }}>
-          Packs are bought only with coins earned by playing. Odds shown are the exact per-club probabilities used by the game.
+          Packs are bought only with coins earned by playing. Rarity odds shown are the exact per-club probabilities used by the game; within a rarity, clubs you don't own yet are 3× as likely as duplicates.
         </div>
         <div className="cards" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))' }}>
           {PACKS.map((pk) => {

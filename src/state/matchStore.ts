@@ -83,13 +83,15 @@ export interface HudState {
   showHint: boolean;
   isPutt: boolean;
   puttFeet: number;
+  suggestPower: number;
+  shotType: string;
 }
 
 export const initialHud = (): HudState => ({
   phase: 'loading', holeNumber: 1, totalHoles: 9, par: 4, holeName: '', holeYards: 0, pars: [], players: [], current: 0, isHumanTurn: false,
   bag: [], clubIdx: 0, ability: null, distToPin: 0, lie: 'tee', elevation: 0, wind: { mph: 0, angle: 0 }, preview: null,
   camMode: 'behind', camModes: ['behind'], shape: 0, traj: 'normal', canShape: false, canTraj: false, botThinking: null, message: null,
-  holeSummary: null, commentary: null, outcome: null, finalRows: null, liePenalty: 0, showHint: false, isPutt: false, puttFeet: 0,
+  holeSummary: null, commentary: null, outcome: null, finalRows: null, liePenalty: 0, showHint: false, isPutt: false, puttFeet: 0, suggestPower: 1, shotType: '',
 });
 
 export const useHud = create<HudState>(() => initialHud());

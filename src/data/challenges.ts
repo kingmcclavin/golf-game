@@ -36,7 +36,7 @@ export const CHALLENGE_TEMPLATES: ChallengeTemplate[] = [
   { kind: 'putt', make: () => ({ text: 'Hole a putt longer than 20 feet', target: 1, reward: 150 }), onRound: (r) => (r.longestPutt >= 6.1 ? 1 : 0) },
   { kind: 'gir', make: (r) => { const n = r.pick([3, 5, 7]); return { text: `Hit ${n} greens in regulation`, target: n, reward: 60 + n * 18 }; }, onRound: (r) => r.gir },
   { kind: 'underpar', make: () => ({ text: 'Finish a round under par', target: 1, reward: 220 }), onRound: (r) => (r.underPar ? 1 : 0) },
-  { kind: 'course', make: (r) => { const c = COURSES[0]; return { text: `Complete a round at ${c.name}`, target: 1, reward: 120, param: c.id }; }, onRound: (r, p) => (r.courseId === p ? 1 : 0) },
+  { kind: 'course', make: () => { const c = COURSES[0]; return { text: `Complete a round at ${c.name}`, target: 1, reward: 120, param: c.id }; }, onRound: (r, p) => (r.courseId === p ? 1 : 0) },
 ];
 
 export interface ChallengeState {

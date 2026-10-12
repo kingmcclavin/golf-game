@@ -24,6 +24,9 @@ class RendererHost {
   private running = false;
   quality: Quality = 'medium';
   fps = 60;
+  /** render every Nth frame (used when the 3D view is mostly covered by menus) */
+  throttle = 1;
+  private frameN = 0;
   private fpsAcc = 0;
   private fpsN = 0;
 
@@ -129,7 +132,8 @@ class RendererHost {
       }
     }
     if (!this.renderer || !this.view || !this.container) return;
-    this.view.update(dt, t / 1000);
+    if (this.throttle > 1 && this.frameN++ % this.throttle !== 0) return;
+    this.view.update(this.throttle > 1 ? dt * this.throttle : dt, t / 1000);
     this.renderer.render(this.view.scene, this.view.camera);
   };
 }
