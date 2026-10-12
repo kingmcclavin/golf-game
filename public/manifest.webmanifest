@@ -1,0 +1,10 @@
+{
+  "name": "Fairway Legends",
+  "short_name": "Fairway",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#0d2a2a",
+  "theme_color": "#0d2a2a",
+  "start_url": "./",
+  "icons": [{ "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}
