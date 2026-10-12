@@ -22,15 +22,18 @@ export default function App() {
 
   useEffect(() => {
     sound.sfxOn = settings.sfx;
+    sound.hapticsOn = settings.haptics;
     sound.setVolume(settings.volume);
     sound.setMusic(settings.music);
     if (host.quality !== settings.quality) host.applyQuality(settings.quality);
   }, [settings]);
 
   useEffect(() => {
+    // iOS Safari only unlocks Web Audio from touchend/click, not touchstart/pointerdown
     const unlock = () => sound.unlock();
-    window.addEventListener('pointerdown', unlock);
-    return () => window.removeEventListener('pointerdown', unlock);
+    const evs = ['pointerdown', 'touchend', 'click'];
+    evs.forEach((e) => window.addEventListener(e, unlock, { passive: true }));
+    return () => evs.forEach((e) => window.removeEventListener(e, unlock));
   }, []);
 
   const backdrop = screen !== 'match' && screen !== 'character' && screen !== 'shop';

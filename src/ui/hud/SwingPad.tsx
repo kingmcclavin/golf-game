@@ -1,30 +1,38 @@
 import { useRef, useState } from 'react';
 import type { MatchController } from '../../game/matchController';
+import { sound } from '../../audio/sound';
 import { useHud, useSwing } from '../../state/matchStore';
 
 /** Pull-back-and-release swing control: press the ball, drag down for power, release to hit. */
 export function SwingPad({ ctl }: { ctl: MatchController }) {
   const phase = useHud((s) => s.phase);
   const isHuman = useHud((s) => s.isHumanTurn);
-  const start = useRef<{ x: number; y: number; id: number } | null>(null);
+  const start = useRef<{ x: number; y: number; id: number; max: number } | null>(null);
   const [drag, setDrag] = useState<{ x: number; y: number; sx: number; sy: number } | null>(null);
   const enabled = phase === 'aim' && isHuman;
-  const maxPull = () => Math.min(250, window.innerHeight * 0.42);
+  /** Full power = pulling to just above the screen edge (a thumb can't go past it on a phone). */
+  const maxPull = (y: number) => {
+    const safeB = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--safe-b-px')) || 0;
+    const space = window.innerHeight - y - safeB - 14;
+    // 110% (overpower) sits at the very bottom, 100% just before it
+    return Math.max(50, Math.min(250, space / 1.1));
+  };
 
   const down = (e: React.PointerEvent) => {
     if (!enabled) return;
     e.preventDefault();
     e.stopPropagation();
     if (!ctl.beginPull()) return;
+    sound.haptic(8);
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    start.current = { x: e.clientX, y: e.clientY, id: e.pointerId };
+    start.current = { x: e.clientX, y: e.clientY, id: e.pointerId, max: maxPull(e.clientY) };
     setDrag({ x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY });
   };
   const move = (e: React.PointerEvent) => {
     const s = start.current;
     if (!s || e.pointerId !== s.id) return;
     e.preventDefault();
-    const mp = maxPull();
+    const mp = s.max;
     ctl.updatePull((e.clientX - s.x) / mp, (e.clientY - s.y) / mp);
     setDrag({ x: e.clientX, y: e.clientY, sx: s.x, sy: s.y });
   };
@@ -34,7 +42,12 @@ export function SwingPad({ ctl }: { ctl: MatchController }) {
     start.current = null;
     setDrag(null);
     if (e.type === 'pointercancel') ctl.cancelPull();
-    else ctl.release();
+    else {
+      // haptics must fire inside the touch gesture on iOS
+      const sw = useSwing.getState();
+      sound.haptic(Math.abs(sw.needle) <= sw.perfectWindow ? 45 : 12);
+      ctl.release();
+    }
   };
 
   return (
@@ -89,7 +102,7 @@ function PowerMeter() {
   const inPerfect = Math.abs(needle) <= perfectWindow;
   const over = power > 1;
   return (
-    <div className="meter needle-wrap" style={{ right: 'calc(140px + var(--safe-r))', bottom: 'calc(10px + var(--safe-b))', display: 'flex', alignItems: 'flex-end', gap: 10 }}>
+    <div className="meter needle-wrap">
       <div className="col" style={{ alignItems: 'center', gap: 4 }}>
         <svg width={230} height={124} style={{ overflow: 'visible' }}>
           {arc(-1, 1, 'rgba(255,90,90,0.75)')}

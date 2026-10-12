@@ -46,6 +46,7 @@ export function SettingsScreen() {
         <div className="setting"><span>Opponent shot speed</span>
           <Seg value={st.botSpeed} options={[['normal', 'Normal'], ['fast', 'Fast'], ['instant', 'Fastest']]} onChange={(v) => upd({ botSpeed: v })} />
         </div>
+        <div className="setting"><span>Haptic feedback<div className="muted" style={{ fontSize: 12 }}>Taps on swing, perfect strikes and holed putts (iPhone: iOS 18+)</div></span><Toggle on={st.haptics} onChange={(v) => upd({ haptics: v })} /></div>
         <div className="setting"><span>Green slope arrows</span><Toggle on={st.showSlopeGrid} onChange={(v) => upd({ showSlopeGrid: v })} /></div>
         <div className="setting"><span>Skip pack animations</span><Toggle on={st.fastPacks} onChange={(v) => upd({ fastPacks: v })} /></div>
         <h3 style={{ margin: '16px 0 8px' }}>Save data</h3>

@@ -9,7 +9,6 @@ import { launchMatch, pendingMatch, pickOpponents } from './PlaySetup';
 export function GameScreen() {
   const go = useStore((s) => s.go);
   const [ctl, setCtl] = useState<MatchController | null>(null);
-  const [portraitOk, setPortraitOk] = useState(false);
   const drag = useRef<{ x: number; y: number; id: number; moved: boolean } | null>(null);
 
   useEffect(() => {
@@ -83,13 +82,6 @@ export function GameScreen() {
     <>
       <Canvas3D onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} />
       {ctl && <HUD ctl={ctl} onQuit={quit} onAgain={again} />}
-      {!portraitOk && (
-        <div className="rotate-hint">
-          <div style={{ fontSize: 60 }}>📱↻</div>
-          Turn your phone sideways for the best view of the course.
-          <button className="btn small" onClick={() => setPortraitOk(true)}>Play in portrait anyway</button>
-        </div>
-      )}
     </>
   );
 }

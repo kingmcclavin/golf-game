@@ -59,11 +59,22 @@ class RendererHost {
     }
   }
 
+  /** dynamic resolution factor (0.55..1) lowered automatically when the frame rate drops */
+  private dyn = 1;
+  private slowT = 0;
+  private fastT = 0;
+
+  private basePixelRatio() {
+    const dpr = window.devicePixelRatio || 1;
+    const q = this.quality;
+    return Math.min(dpr, q === 'low' ? 1 : q === 'medium' ? 1.5 : 2);
+  }
+
   applyQuality(q: Quality) {
     this.quality = q;
+    this.dyn = 1;
     if (!this.renderer) return;
-    const dpr = window.devicePixelRatio || 1;
-    this.renderer.setPixelRatio(Math.min(dpr, q === 'low' ? 1 : q === 'medium' ? 1.5 : 2));
+    this.renderer.setPixelRatio(this.basePixelRatio());
     this.renderer.shadowMap.enabled = q !== 'low';
     this.resize();
   }
@@ -117,6 +128,22 @@ class RendererHost {
     }
   }
 
+  /** Keep phones smooth: trade pixels for frame rate (and back) a step at a time. */
+  private adaptResolution() {
+    if (!this.renderer || this.throttle > 1) return;
+    if (this.fps < 42) { this.slowT++; this.fastT = 0; } else if (this.fps > 57) { this.fastT++; this.slowT = 0; } else { this.slowT = 0; this.fastT = 0; }
+    let next = this.dyn;
+    if (this.slowT >= 2 && this.dyn > 0.56) next = Math.max(0.55, this.dyn - 0.15);
+    if (this.fastT >= 5 && this.dyn < 1) next = Math.min(1, this.dyn + 0.1);
+    if (next !== this.dyn) {
+      this.dyn = next;
+      this.slowT = 0;
+      this.fastT = 0;
+      this.renderer.setPixelRatio(this.basePixelRatio() * next);
+      this.resize();
+    }
+  }
+
   private loop = (t: number) => {
     requestAnimationFrame(this.loop);
     if (document.hidden) return;
@@ -129,6 +156,7 @@ class RendererHost {
         this.fps = this.fpsN / this.fpsAcc;
         this.fpsAcc = 0;
         this.fpsN = 0;
+        this.adaptResolution();
       }
     }
     if (!this.renderer || !this.view || !this.container) return;

@@ -76,7 +76,7 @@ export function BagScreen() {
       <TopBar title="Golf Bag" />
       <div className="bag-layout">
         <div className="panel" style={{ padding: 10, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-          <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>Tap a slot, then pick a club. Max 9 clubs; a putter is required.</div>
+          <div className="muted hide-portrait" style={{ fontSize: 13, marginBottom: 6 }}>Tap a slot, then pick a club. Max 9 clubs; a putter is required.</div>
           <div className="bag-slots">
             {BAG_SLOTS.map((s) => {
               const id = p.bag[s];

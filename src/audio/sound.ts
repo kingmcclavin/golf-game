@@ -213,9 +213,33 @@ class SoundEngine {
     this.musicTimer = null;
   }
 
+  hapticsOn = true;
+  private hapticLabel: HTMLLabelElement | null = null;
+
+  /**
+   * Short haptic tap. Android uses the Vibration API; iPhone Safari has none, but toggling a native
+   * `<input type="checkbox" switch>` (iOS 18+) produces the system haptic tick, so we use that.
+   */
   haptic(ms = 15) {
+    if (!this.hapticsOn) return;
     try {
-      navigator.vibrate?.(ms);
+      if (typeof navigator.vibrate === 'function') {
+        navigator.vibrate(ms);
+        return;
+      }
+      if (!this.hapticLabel) {
+        const label = document.createElement('label');
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.setAttribute('switch', '');
+        label.appendChild(input);
+        label.style.cssText = 'position:fixed;left:-100px;top:0;opacity:0;pointer-events:none';
+        label.setAttribute('aria-hidden', 'true');
+        document.body.appendChild(label);
+        this.hapticLabel = label;
+      }
+      this.hapticLabel.click();
+      if (ms >= 40) setTimeout(() => this.hapticLabel?.click(), 90);
     } catch {
       /* not supported */
     }

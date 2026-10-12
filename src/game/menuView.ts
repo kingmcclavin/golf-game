@@ -94,6 +94,11 @@ export class PreviewView implements View {
     this.golfer.setOutfit(o);
   }
 
+  private aspect = 1;
+  resize(w: number, h: number) {
+    this.aspect = w / h;
+  }
+
   rotate(dx: number) {
     this.targetYaw += dx * 0.012;
   }
@@ -102,7 +107,8 @@ export class PreviewView implements View {
     this.yaw += (this.targetYaw - this.yaw) * Math.min(1, dt * 8);
     this.golfer.root.rotation.y = this.yaw;
     this.golfer.bag.rotation.y = this.yaw + 0.6;
-    const d = 5.4 * this.zoom;
+    // narrow stages need the camera further back so the whole golfer fits
+    const d = 5.4 * this.zoom * Math.max(1, 1.1 / Math.min(1.1, this.aspect));
     this.camera.position.set(0, 1.45, d);
     this.camera.lookAt(0, 0.95, 0);
     this.golfer.update(dt);

@@ -6,6 +6,7 @@ import { fmtRel } from '../../golf/scoring';
 import { useStore, type Screen } from '../../state/store';
 import { Coins, LevelPill } from '../components/common';
 import { startQuickMatch } from './PlaySetup';
+import { InstallTip } from '../components/InstallTip';
 
 export function MainMenu() {
   const p = useStore((s) => s.profile);
@@ -40,6 +41,7 @@ export function MainMenu() {
       <div className="menu">
         <div className="menu-left">
           <div className="logo">Fairway<span>Legends</span></div>
+          <InstallTip />
           <button className="btn primary play-btn" onClick={() => nav('play')}>⛳ Play Golf</button>
           <button className="btn blue" onClick={() => { sound.play('click'); startQuickMatch(); }}>
             ⚡ Quick 3-Hole Match {last ? `· ${courseById(last.courseId).name}` : ''}

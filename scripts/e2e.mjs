@@ -148,7 +148,7 @@ if (c1.cosmetics.length === c0 + 1 && c1.outfit.hat === c1.cosmetics[c1.cosmetic
 await page.screenshot({ path: `${OUT}/12-shop-bought.png` });
 
 // ---- phone + tablet layouts with touch
-for (const [name, vp] of [['iphone', { width: 844, height: 390 }], ['ipad', { width: 1180, height: 820 }]]) {
+for (const [name, vp] of [['iphone-portrait', { width: 390, height: 844 }], ['iphone-landscape', { width: 844, height: 390 }], ['ipad', { width: 1180, height: 820 }]]) {
   const mctx = await browser.newContext({ viewport: vp, hasTouch: true, isMobile: true, deviceScaleFactor: 2 });
   const mp = await mctx.newPage();
   mp.on('pageerror', (e) => errors.push(`${name}: ${e.message}`));
@@ -176,13 +176,18 @@ for (const [name, vp] of [['iphone', { width: 844, height: 390 }], ['ipad', { wi
   const pad = await mp.locator('.swing-pad').boundingBox();
   const cdp = await mctx.newCDPSession(mp);
   const x = pad.x + pad.width / 2, y = pad.y + pad.height / 2;
+  // drag down to (but never past) the bottom edge of the screen, as a thumb would
+  const edge = vp.height - 2;
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
   for (let k = 1; k <= 8; k++) {
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y + k * 14 }] });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y + ((edge - y) * k) / 8 }] });
     await mp.waitForTimeout(30);
   }
   await mp.screenshot({ path: `${OUT}/21-${name}-pull.png` });
   const pulling = await mp.evaluate(() => window.__fl.ctl.pulling);
+  const edgePower = await mp.evaluate(() => window.__fl.ctl.power);
+  if (edgePower >= 1.0) ok(`${name}: full power reachable within the screen (${edgePower.toFixed(2)})`);
+  else fail(`${name}: only ${Math.round(edgePower * 100)}% power reachable before the screen edge`);
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await mp.waitForTimeout(600);
   const phase = await mp.evaluate(() => window.__fl.ctl.phase);

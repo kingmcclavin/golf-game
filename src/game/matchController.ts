@@ -544,7 +544,6 @@ export class MatchController implements View {
     const p = this.match.players[pi];
     const putt = isPutter(setup.club);
     sound.play(putt ? 'putt' : 'hit', Math.min(1, setup.power));
-    if (!p.isBot) sound.haptic(plan.perfect ? 30 : 12);
     if (plan.perfect && !putt) {
       this.particles.burst(setup.ball.x, setup.ball.y + 0.1, setup.ball.z, 'sparkle', 30);
       sound.play('perfect');
@@ -640,6 +639,7 @@ export class MatchController implements View {
       const b = this.balls[f.pi].position;
       if (p.strokes - this.match.par < 0) {
         this.particles.burst(b.x, b.y + 0.3, b.z, 'confetti', 120);
+        if (!p.isBot) sound.haptic(60);
         sound.play('cheer');
         g.react('celebrate');
       }
@@ -827,11 +827,11 @@ export class MatchController implements View {
     if (p.isBot) mode = p.lie === 'green' || p.lie === 'fringe' ? 'green' : 'behind';
     if (mode === 'behind') {
       const big = club.def.category === 'driver' || club.def.category === 'wood';
-      const D = putt ? 3.4 : big ? 6.5 : 5.2;
-      const H = putt ? 1.5 : 2.3;
+      const D = (putt ? 3.4 : big ? 6.5 : 5.2) * (this.portrait ? 1.25 : 1);
+      const H = (putt ? 1.5 : 2.3) * (this.portrait ? 1.3 : 1);
       const right = new THREE.Vector3(-dir.z, 0, dir.x);
-      this.desPos.copy(ball).addScaledVector(dir, -D).addScaledVector(right, putt ? 0 : 0.6).add(new THREE.Vector3(0, H, 0));
-      this.desLook.copy(ball).addScaledVector(dir, putt ? 3 : 25).add(new THREE.Vector3(0, putt ? 0 : 3, 0));
+      this.desPos.copy(ball).addScaledVector(dir, -D).addScaledVector(right, putt ? 0 : this.portrait ? -0.7 : 0.6).add(new THREE.Vector3(0, H, 0));
+      this.desLook.copy(ball).addScaledVector(dir, putt ? 3 : 25).addScaledVector(right, this.portrait && !putt ? -1.5 : 0).add(new THREE.Vector3(0, putt ? 0 : 3, 0));
     } else if (mode === 'green') {
       const pin = w.hole.pin;
       const pinV = new THREE.Vector3(pin.x, w.height(pin.x, pin.z), pin.z);
@@ -927,6 +927,17 @@ export class MatchController implements View {
       updateLabel(this.pinLabel, txt, 'rgba(20,30,40,0.75)');
     }
     this.pinLabel.visible = this.phase !== 'intro' || this.introT > 2.4;
+  }
+
+  private portrait = false;
+  /** Phones held upright get a wider vertical field of view so the target stays in frame. */
+  resize(w: number, h: number) {
+    this.portrait = h > w;
+    this.camera.fov = this.portrait ? 72 : 55;
+    // shift the picture up so the ball and golfer sit above the thumb controls
+    if (this.portrait) this.camera.setViewOffset(w, h, 0, h * 0.14, w, h);
+    else this.camera.clearViewOffset();
+    this.camera.updateProjectionMatrix();
   }
 
   /** Where the current shot preview lands (for the mini-map). */

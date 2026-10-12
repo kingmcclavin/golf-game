@@ -23,6 +23,7 @@
   --safe-r: env(safe-area-inset-right, 0px);
   --safe-t: env(safe-area-inset-top, 0px);
   --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-b-px: 0;
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -224,6 +225,8 @@ h1, h2, h3 { font-family: var(--display); margin: 0; line-height: 1.05; }
 .power-bar .fill { position: absolute; left: 0; right: 0; bottom: 0; border-radius: 99px; background: linear-gradient(0deg, #4cd17a, #ffd23a 75%, #ff5a5a); }
 .power-bar .suggest { position: absolute; left: -2px; right: -2px; height: 4px; background: #7ad8ff; box-shadow: 0 0 6px #7ad8ff; border-radius: 2px; }
 .power-bar .over { position: absolute; left: 0; right: 0; height: 2px; background: #fff; }
+.needle-wrap { right: calc(140px + var(--safe-r)); bottom: calc(10px + var(--safe-b)); display: flex; align-items: flex-end; gap: 10px; }
+.skip-btn { position: absolute; right: calc(150px + var(--safe-r)); bottom: calc(16px + var(--safe-b)); }
 .needle-arc { position: absolute; width: 230px; height: 120px; }
 .hud-center-msg { position: absolute; left: 50%; top: 22%; transform: translateX(-50%); text-align: center; pointer-events: none; }
 .msg { animation: msgIn 0.45s cubic-bezier(.2,1.6,.4,1); text-shadow: 0 3px 0 rgba(0,0,0,0.35), 0 6px 24px rgba(0,0,0,0.5); }
@@ -296,6 +299,73 @@ h1, h2, h3 { font-family: var(--display); margin: 0; line-height: 1.05; }
   .board { font-size: 12px; }
   .hole-card .n { font-size: 18px; }
 }
-@media (max-width: 760px) and (orientation: portrait) {
+@media (max-width: 0px) {
   .in-game .rotate-hint { display: flex; position: absolute; inset: 0; z-index: 90; align-items: center; justify-content: center; flex-direction: column; gap: 14px; background: rgba(6, 20, 20, 0.92); font-family: var(--display); font-size: 22px; text-align: center; padding: 30px; }
+}
+
+/* ---------- the swing pad sits mid-right so there is always room below it to pull down */
+.hud-right { bottom: auto; top: calc(50% - 64px); }
+.needle-wrap { bottom: auto; top: calc(50% - 150px); }
+.hint { bottom: auto; top: calc(50% - 50px); }
+
+/* ---------- iPhone landscape: lift the swing pad so there is room to pull down */
+@media (max-height: 520px) and (orientation: landscape) {
+  .hud-right { bottom: auto; top: 30%; }
+  .needle-wrap { right: calc(130px + var(--safe-r)); bottom: auto; top: 6%; }
+  .hint { bottom: auto; top: 26%; right: calc(130px + var(--safe-r)); }
+}
+
+/* ---------- iPhone portrait: thumb-first layout */
+.hud.portrait .hud-top { flex-wrap: wrap; gap: 6px; top: calc(6px + var(--safe-t)); left: calc(6px + var(--safe-l)); right: calc(6px + var(--safe-r)); }
+.hud.portrait .hole-card { min-width: 0; padding: 6px 10px; }
+.hud.portrait .hole-card .n { font-size: 17px; }
+.hud.portrait .hole-card .h { font-size: 11px; }
+.hud.portrait .wind { width: 56px; height: 56px; }
+.hud.portrait .wind .mph { font-size: 13px; margin-top: 14px; }
+.hud.portrait .minimap { width: 64px; height: 88px; }
+.hud.portrait .hud-top .btn.icon { width: 42px; min-height: 40px; }
+.hud.portrait .board { order: 10; flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; background: rgba(6,24,26,0.6); }
+.hud.portrait .board-row { padding: 2px 8px; background: rgba(255,255,255,0.06); border-radius: 99px; }
+.hud.portrait .board-row .sc { min-width: 0; margin-left: 4px; }
+.hud.portrait .p-info { position: absolute; left: 8px; right: 8px; bottom: calc(var(--safe-b) + 250px); display: flex; flex-direction: column; align-items: center; gap: 5px; pointer-events: none; }
+.hud.portrait .p-info .pe { pointer-events: auto; }
+.hud.portrait .ability-chip { max-width: 100%; text-align: center; font-size: 12px; }
+.hud.portrait .info-chip { font-size: 12px; padding: 3px 8px; }
+.hud.portrait .seg button { padding: 5px 10px; font-size: 13px; }
+.hud.portrait .p-pad { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(var(--safe-b) + 112px); display: flex; justify-content: center; }
+.hud.portrait .swing-pad { width: 124px; height: 124px; }
+.hud.portrait .p-aim { position: absolute; bottom: calc(var(--safe-b) + 140px); }
+.hud.portrait .p-aim.left { left: 18px; }
+.hud.portrait .p-aim.right { right: 18px; }
+.hud.portrait .p-aim .btn.icon { width: 58px; min-height: 58px; border-radius: 50%; font-size: 22px; background: rgba(6,24,26,0.75); }
+.hud.portrait .p-clubs { position: absolute; left: 8px; right: 8px; bottom: calc(var(--safe-b) + 8px); display: flex; flex-direction: column; gap: 6px; transition: opacity 0.2s; }
+.hud.portrait .p-clubs.faded { opacity: 0.25; pointer-events: none; }
+.hud.portrait .p-clubs .club-btn { min-width: 0; }
+.hud.portrait .p-clubs .btn.icon { width: 52px; font-size: 26px; }
+.hud.portrait .p-club-list { padding: 6px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.hud.portrait .needle-wrap { left: 50%; right: auto; transform: translateX(-50%) scale(0.85); transform-origin: bottom center; bottom: calc(var(--safe-b) + 250px); }
+.hud.portrait .hint { left: 16px; right: 16px; max-width: none; bottom: auto; top: calc(var(--safe-t) + 150px); text-align: center; font-size: 13px; }
+.hud.portrait .skip-btn { right: 12px; bottom: calc(var(--safe-b) + 250px); }
+.hud.portrait .thinking { bottom: calc(var(--safe-b) + 70px); max-width: 92vw; white-space: normal; text-align: center; }
+.hud.portrait .hud-center-msg { top: 30%; width: 92vw; }
+.hud.portrait .msg .t { font-size: 34px; }
+
+.install-tip { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-color: rgba(255,210,58,0.6); }
+
+/* ---------- iPhone portrait: menu screens */
+@media (orientation: portrait) and (max-width: 700px) {
+  .screen-head h2 { font-size: 24px; }
+  .screen-head { flex-wrap: wrap; row-gap: 6px; }
+  .hide-portrait { display: none !important; }
+  .bag-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .bag-layout > *, .char-layout > * { min-width: 0; }
+  .bag-layout > .panel { padding: 6px !important; }
+  .bag-slots { flex-direction: row; overflow-x: auto; overflow-y: hidden; padding-bottom: 4px; touch-action: pan-x; scroll-snap-type: x proximity; }
+  .bag-slots .slot { min-width: 168px; scroll-snap-align: start; }
+  .bag-slots .slot .btn.small { display: none; }
+  .char-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: 38vh minmax(0, 1fr); }
+  .char-stage { min-height: 0; }
+  .cards { grid-template-columns: minmax(0, 1fr) !important; }
+  .modal { padding: 14px; border-radius: 18px; }
+  .lb-row { font-size: 15px; }
 }

@@ -105,8 +105,14 @@ Player XP and levels unlock courses, opponent difficulties, shot shaping, trajec
 * Saved automatically to `localStorage` (versioned format, migrations in `MIGRATIONS`, validation and repair of damaged data, automatic backup copy, graceful handling of storage errors and private mode).
 * **Browser-local saves are lost if you clear site data, use private browsing or switch browser/device.** Use *Settings → Export save* to download a backup and *Import save* to restore it on any device.
 
-### Mobile and tablet
-Touch-first controls: dedicated swing pad with pointer capture, `touch-action: none` on the play area, no pinch or double-tap zoom, safe-area insets, compact layouts for phone landscape and a rotate prompt in portrait (dismissible). Graphics quality presets (Low disables shadows and grass and lowers resolution) and capped pixel ratio keep frame rates reasonable. If WebGL is unavailable, a helpful message is shown and the menus still work.
+### iPhone first (also iPad and desktop)
+* **Portrait play** is the primary phone layout: scoreboard and wind at the top; info chips, aim buttons and the big swing ball in the thumb zone; the club picker along the bottom. The 3D view gets a wider field of view and a raised framing so the golfer and ball sit above your thumbs. Landscape works too.
+* **Pull distance is sized to the screen.** Full power is reached just above the screen edge (overpower right at the edge), so a thumb can always reach 100% in both orientations. The home indicator area is excluded.
+* **Home-screen app:** in Safari tap Share → *Add to Home Screen* (the menu shows a one-time tip). It launches full screen with its own icon. A service worker caches the game so it **plays offline** after the first visit.
+* **Haptics:** a tap when you start the pull and a stronger one on a perfect release, holed birdies and epic pack pulls. This uses the iOS 18 switch-input haptic on iPhone and the Vibration API elsewhere, and can be turned off in Settings.
+* **Audio** unlocks on the first touch, as iOS Safari requires. Sounds follow the ring/silent switch.
+* **Performance:** the pixel ratio is capped per quality preset, and adaptive resolution drops rendering resolution step by step if the frame rate falls below ~42 fps (raising it again when there's headroom). Menus throttle the background 3D scene. Low quality disables shadows and grass.
+* Touch details: pointer capture on the swing pad, `touch-action: none` on the course, no pinch, double-tap or long-press callouts, safe-area insets for the notch and Dynamic Island, and scrollable sheets on every screen.
 
 ## Project structure
 
@@ -153,7 +159,7 @@ Distances are yards along the centre line, lateral offsets in yards (+ = right).
 ## Testing
 
 * `npm test` runs 28 tests: physics (calibration, power→distance, slopes and resting, cup capture and lip-outs, water drop, OOB, bunkers, wind, mistiming), validity of all 72 hole layouts, bots finishing every hole of every course from real simulated shots, experts beating beginners, statistical verification of pack odds, duplicate/upgrade rules, bag rules, spending limits, rewards, achievements, XP, save round-trips, v1→v2 migration and repair of corrupted saves. The bot tests take a couple of minutes.
-* `npm run e2e` (after `npm run build` and `npx vite preview --port 4173`) drives headless Chromium. It plays a full 3-hole match against a bot through the real UI controller, checks rewards and persistence after a reload, buys and opens a pack, buys and equips a cosmetic, then performs real touch pull-and-release swings in iPhone- and iPad-sized viewports, saving screenshots to `screenshots/`. Set `CHROME=/path/to/chrome` if Chromium is elsewhere.
+* `npm run e2e` (after `npm run build` and `npx vite preview --port 4173`) drives headless Chromium. It plays a full 3-hole match against a bot through the real UI controller, checks rewards and persistence after a reload, buys and opens a pack, buys and equips a cosmetic, then performs real touch pull-and-release swings in iPhone portrait, iPhone landscape and iPad viewports (checking that full power is reachable without dragging off-screen), saving screenshots to `screenshots/`. Set `CHROME=/path/to/chrome` if Chromium is elsewhere.
 
 ## Known limitations
 

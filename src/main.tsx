@@ -7,6 +7,19 @@ import './styles.css';
 document.addEventListener('gesturestart', (e) => e.preventDefault());
 document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
 
+// expose the bottom safe-area inset (home indicator) as a plain number for JS layout maths
+const probe = document.createElement('div');
+probe.style.cssText = 'position:fixed;bottom:0;height:0;padding-bottom:env(safe-area-inset-bottom,0px);visibility:hidden';
+document.body.appendChild(probe);
+const measureSafe = () => document.documentElement.style.setProperty('--safe-b-px', String(parseFloat(getComputedStyle(probe).paddingBottom) || 0));
+measureSafe();
+window.addEventListener('resize', measureSafe);
+
+// offline play (production builds only)
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => undefined));
+}
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <App />

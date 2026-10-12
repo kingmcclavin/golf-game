@@ -10,6 +10,7 @@ import { Coins, Modal, Seg, Toggle } from '../components/common';
 import { ACHIEVEMENTS } from '../../data/achievements';
 import { courseById } from '../../data/courses';
 import { Minimap } from './Minimap';
+import { usePhonePortrait } from '../hooks';
 import { SwingPad } from './SwingPad';
 
 const LIE_LABEL: Record<string, string> = {
@@ -19,6 +20,8 @@ const LIE_LABEL: Record<string, string> = {
 export function HUD({ ctl, onQuit, onAgain }: { ctl: MatchController; onQuit: () => void; onAgain: () => void }) {
   const h = useHud();
   const pulling = useSwing((s) => s.pulling);
+  const portrait = usePhonePortrait();
+  const [abilityOpen, setAbilityOpen] = useState(false);
   const [paused, setPaused] = useState(false);
   const [clubList, setClubList] = useState(false);
   const [card, setCard] = useState(false);
@@ -41,13 +44,13 @@ export function HUD({ ctl, onQuit, onAgain }: { ctl: MatchController; onQuit: ()
   const club = h.bag[h.clubIdx];
   const me = h.players[0];
   return (
-    <div className="hud">
+    <div className={`hud ${portrait ? 'portrait' : ''} ${pulling ? 'is-pulling' : ''}`}>
       {/* ---------- top */}
       <div className="hud-top">
         <div className="hole-card pe" onClick={() => setCard(true)}>
           <div className="h">Hole {h.holeNumber}/{h.totalHoles} · Par {h.par}</div>
           <div className="n">{h.holeName}</div>
-          <div className="h">{h.holeYards} yd · tap for card</div>
+          <div className="h">{h.holeYards} yd{portrait ? '' : ' · tap for card'}</div>
         </div>
         <div className="board">
           {h.players.map((p, i) => (
@@ -72,6 +75,64 @@ export function HUD({ ctl, onQuit, onAgain }: { ctl: MatchController; onQuit: ()
         </div>
       </div>
 
+      {portrait ? (
+        <>
+          {aiming && club && !pulling && (
+            <div className="p-info">
+              <div className="row wrap" style={{ gap: 5, justifyContent: 'center' }}>
+                <span className="info-chip">⛳ {fmtDist(h.distToPin)}</span>
+                {h.shotType && <span className="info-chip" style={{ color: '#ffe9a0' }}>{h.shotType}</span>}
+                <span className="info-chip">{LIE_LABEL[h.lie]}{h.liePenalty > 0.01 ? ` −${Math.round(h.liePenalty * 100)}%` : ''}</span>
+                {Math.abs(h.elevation) > 1 && <span className="info-chip">{h.elevation > 0 ? '▲' : '▼'} {Math.round(Math.abs(h.elevation) * 3.28)} ft</span>}
+                {h.preview && !h.isPutt && <span className="info-chip">Carry {Math.round(yd(h.preview.carry))} · ~{Math.round(yd(h.preview.total))}</span>}
+              </div>
+              {h.ability && (
+                <button className={`ability-chip pe ${h.ability.state}`} onClick={() => setAbilityOpen(!abilityOpen)}>
+                  <b>✦ {h.ability.name}</b> · {h.ability.state === 'active' ? 'ACTIVE' : h.ability.state === 'conditional' ? 'On perfect' : 'Inactive'} {abilityOpen ? '▴' : 'ⓘ'}
+                  {abilityOpen && <><br /><span style={{ opacity: 0.85 }}>{h.ability.desc}</span></>}
+                </button>
+              )}
+              {(h.canShape || h.canTraj) && !h.isPutt && (
+                <div className="row pe" style={{ gap: 5, justifyContent: 'center' }}>
+                  {h.canShape && <Seg value={h.shape < -0.2 ? 'draw' : h.shape > 0.2 ? 'fade' : 'straight'} options={[['draw', '↰'], ['straight', 'Straight'], ['fade', '↱']]} onChange={(v) => ctl.setShape(v === 'draw' ? -0.6 : v === 'fade' ? 0.6 : 0)} />}
+                  {h.canTraj && <Seg value={h.traj} options={[['low', 'Low'], ['normal', 'Mid'], ['high', 'High']]} onChange={(v) => ctl.setTraj(v)} />}
+                </div>
+              )}
+            </div>
+          )}
+          {aiming && !pulling && (
+            <>
+              <div className="pe p-aim left"><HoldButton label="◀" onTick={() => ctl.nudgeAim(-0.4)} /></div>
+              <div className="pe p-aim right"><HoldButton label="▶" onTick={() => ctl.nudgeAim(0.4)} /></div>
+            </>
+          )}
+          <div className="p-pad">
+            <SwingPad ctl={ctl} />
+          </div>
+          {aiming && club && (
+            <div className={`p-clubs pe ${pulling ? 'faded' : ''}`}>
+              {clubList && (
+                <div className="panel p-club-list">
+                  {h.bag.map((c, i) => (
+                    <button key={c.id} className={`btn small ${i === h.clubIdx ? 'active' : ''}`} style={{ flexDirection: 'column', gap: 0, borderColor: RARITY_INFO[c.rarity].color }} onClick={() => { ctl.selectClub(i); setClubList(false); }}>
+                      <span>{c.short}</span><span style={{ fontSize: 11 }} className="muted">{c.category === 'putter' ? 'putt' : `${c.carry}y`}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="club-sel">
+                <button className="btn icon" onClick={() => ctl.cycleClub(-1)} aria-label="Longer club">‹</button>
+                <button className="club-btn grow" style={{ borderColor: RARITY_INFO[club.rarity].color }} onClick={() => setClubList(!clubList)}>
+                  <span className="cn">{club.short} · {club.name}</span>
+                  <span className="cs">{club.category === 'putter' ? 'Putter' : `${club.carry} yd max`} · <span className={`r-${club.rarity}`}>{RARITY_INFO[club.rarity].label}</span> · tap for bag</span>
+                </button>
+                <button className="btn icon" onClick={() => ctl.cycleClub(1)} aria-label="Shorter club">›</button>
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        <>
       {/* ---------- bottom left: club & info */}
       {aiming && club && (
         <div className="hud-left">
@@ -127,10 +188,12 @@ export function HUD({ ctl, onQuit, onAgain }: { ctl: MatchController; onQuit: ()
       <div className="hud-right">
         <SwingPad ctl={ctl} />
       </div>
+        </>
+      )}
       {h.showHint && aiming && <div className="hint">Press the ball and <b>pull down</b> to set power. Release when the needle is in the <b>green</b>! Drag on the course to aim.</div>}
 
       {(h.phase === 'flight' || h.phase === 'botThink' || h.phase === 'swing' || h.phase === 'result') && !h.isHumanTurn && (
-        <button className="btn small pe" style={{ position: 'absolute', right: 'calc(150px + var(--safe-r))', bottom: 'calc(16px + var(--safe-b))' }} onClick={() => ctl.skip()}>⏩ Skip</button>
+        <button className="btn small pe skip-btn" onClick={() => ctl.skip()}>⏩ Skip</button>
       )}
       {h.botThinking && <div className="thinking">🤔 {h.botThinking}</div>}
 
