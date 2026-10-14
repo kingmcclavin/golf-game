@@ -82,6 +82,23 @@ function joint(p: THREE.Vector3, r: number, m: THREE.Material) {
   return s;
 }
 
+interface Pose {
+  hipsYaw: number;
+  shoulderYaw: number;
+  bend: number;
+  headYaw: number;
+  hands: THREE.Vector3;
+  shaft: THREE.Vector3;
+  legTurn: number;
+}
+
+const UP = new THREE.Vector3(0, 1, 0);
+const ARM_UPPER = 0.33;
+const ARM_FORE = 0.32;
+// elbow hints: both elbows point toward the ground, the lead one slightly toward the target
+const LEAD_POLE = new THREE.Vector3(-0.25, -1, -0.45).normalize();
+const TRAIL_POLE = new THREE.Vector3(-0.25, -1, 0.5).normalize();
+
 export type SwingPhase = 'idle' | 'address' | 'backswing' | 'downswing' | 'follow' | 'finish' | 'celebrate' | 'sad';
 
 /**
@@ -93,7 +110,9 @@ export class GolferModel {
   private hips = new THREE.Group();
   private spine = new THREE.Group();
   private head = new THREE.Group();
-  private arms = new THREE.Group();
+  private armRig: Array<{ side: number; shoulderJoint: THREE.Mesh; upper: THREE.Mesh; elbowJoint: THREE.Mesh; fore: THREE.Mesh; hand: THREE.Mesh }> = [];
+  private shoulderW = 0.2;
+  private wristAcc: THREE.Mesh | null = null;
   private clubPivot = new THREE.Group();
   private clubMesh = new THREE.Group();
   readonly bag = new THREE.Group();
@@ -102,8 +121,7 @@ export class GolferModel {
   private phaseT = 0;
   private back = 0;
   private swingFrom = 0;
-  private fullBack = 2.3;
-  private follow = 2.5;
+  private followAmt = 1;
   private putter = false;
   private onImpact: (() => void) | null = null;
   ballOffset = 0.9;
@@ -132,7 +150,8 @@ export class GolferModel {
     this.hips = new THREE.Group();
     this.spine = new THREE.Group();
     this.head = new THREE.Group();
-    this.arms = new THREE.Group();
+    this.armRig = [];
+    this.wristAcc = null;
     this.clubPivot = new THREE.Group();
     this.clubMesh = new THREE.Group();
     this.legs = [];
@@ -181,7 +200,8 @@ export class GolferModel {
       const sole = new THREE.Mesh(new THREE.BoxGeometry(0.29, 0.03, 0.125), soleMat);
       sole.position.set(foot.x + 0.07, foot.y - 0.075, foot.z);
       leg.add(shoe, sole);
-      this.hips.add(leg);
+      leg.position.y = 0.95;
+      this.root.add(leg);
       this.legs.push(leg);
     }
     if (skirt) {
@@ -197,6 +217,8 @@ export class GolferModel {
 
     // spine / torso
     this.hips.add(this.spine);
+    // twist about the spine's own axis, then tilt forward: the shoulder plane tilts like a real turn
+    this.spine.rotation.order = 'ZYX';
     this.spine.rotation.z = this.bend;
     const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.2 * widthMul, 0.16 * widthMul, 0.56, 12), shirtMat);
     torso.scale.set(0.75, 1, 1.15);
@@ -262,32 +284,40 @@ export class GolferModel {
     this.buildHat(o);
     this.buildGlasses(o);
 
-    // arms swing group (pivot between the shoulders)
-    this.spine.add(this.arms);
-    this.arms.position.y = 0.52;
-    const hands = new THREE.Vector3(0.4, -0.47, 0);
+    // arms: upper arm + forearm per side, posed every frame by two-bone IK so the hands stay on the grip
     const glove = cosmeticById(o.gloves);
     const gloveMat = glove ? mat(glove.color) : skin;
-    for (const side of [-1, 1]) {
-      const sh = new THREE.Vector3(0, 0, side * 0.2 * widthMul);
-      const elbow = sh.clone().lerp(hands, 0.5).add(new THREE.Vector3(0.02, 0, side * 0.03));
-      const sleeveEnd = sh.clone().lerp(elbow, shirt?.style === 'tee' || shirt?.style === 'polo' || shirt?.style === 'floral' ? 0.7 : 1.4);
-      this.arms.add(joint(sh, 0.07 * widthMul, sleeveMat));
-      this.arms.add(limb(sh, sleeveEnd, 0.068 * widthMul, 0.06 * widthMul, sleeveMat));
-      this.arms.add(limb(sleeveEnd, elbow, 0.052, 0.048, sleeveEnd.distanceTo(sh) > elbow.distanceTo(sh) ? sleeveMat : skin));
-      this.arms.add(limb(elbow, hands.clone().add(new THREE.Vector3(0, 0, side * 0.02)), 0.048, 0.042, skin));
-      // lead (left) hand is side -1 (toward the target)
-      this.arms.add(joint(hands.clone().add(new THREE.Vector3(0, side * 0.03, side * 0.015)), 0.05, side === -1 ? gloveMat : skin));
-    }
+    const longSleeve = !(shirt?.style === 'tee' || shirt?.style === 'polo' || shirt?.style === 'floral' || !shirt);
+    const unitLimb = (r1: number, r2: number, m: THREE.Material) => {
+      const mesh = new THREE.Mesh(new THREE.CylinderGeometry(r2, r1, 1, 8).translate(0, 0.5, 0), m);
+      mesh.castShadow = true;
+      this.root.add(mesh);
+      return mesh;
+    };
+    const ball = (r: number, m: THREE.Material) => {
+      const mesh = new THREE.Mesh(new THREE.SphereGeometry(r, 10, 8), m);
+      mesh.castShadow = true;
+      this.root.add(mesh);
+      return mesh;
+    };
+    this.armRig = [-1, 1].map((side) => ({
+      side,
+      shoulderJoint: ball(0.07 * widthMul, sleeveMat),
+      upper: unitLimb(0.066 * widthMul, 0.055 * widthMul, sleeveMat),
+      elbowJoint: ball(0.05, longSleeve ? sleeveMat : skin),
+      fore: unitLimb(0.05, 0.042, longSleeve ? sleeveMat : skin),
+      // the lead (left, target-side) hand wears the glove
+      hand: ball(0.05, side === -1 ? gloveMat : skin),
+    }));
+    this.shoulderW = 0.2 * widthMul;
     if (acc?.style === 'watch' || acc?.style === 'wristband') {
       const w = new THREE.Mesh(new THREE.TorusGeometry(0.048, 0.016, 6, 12), mat(acc.color, { metalness: acc.style === 'watch' ? 0.8 : 0, roughness: 0.3 }));
-      w.position.copy(hands).add(new THREE.Vector3(-0.07, 0.08, -0.03));
-      w.rotation.set(0.3, 0, 0.6);
-      this.arms.add(w);
+      this.wristAcc = w;
+      this.root.add(w);
     }
-    this.clubPivot.position.copy(hands);
-    this.arms.add(this.clubPivot);
+    this.root.add(this.clubPivot);
     this.clubPivot.add(this.clubMesh);
+    this.pose(this.addressPose());
 
     this.buildBag(o);
   }
@@ -557,28 +587,8 @@ export class GolferModel {
     band.position.y = -L + 0.12;
     for (const m of [shaft, grip, head, band]) m.castShadow = true;
     this.clubMesh.add(shaft, grip, head, band);
-    this.orientClub();
+    this.pose(this.addressPose());
   }
-
-  /** Point the club at the ball at address. */
-  private orientClub() {
-    const prev = { a: this.arms.rotation.x, c: this.clubPivot.rotation.x, s: this.spine.rotation.y, h: this.hips.rotation.y };
-    this.arms.rotation.x = 0;
-    this.clubPivot.rotation.set(0, 0, 0);
-    this.clubPivot.quaternion.identity();
-    this.spine.rotation.y = 0;
-    this.hips.rotation.y = 0;
-    this.root.updateMatrixWorld(true);
-    const ballWorld = this.root.localToWorld(new THREE.Vector3(this.ballOffset, 0.03, 0));
-    const local = this.clubPivot.worldToLocal(ballWorld.clone());
-    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, -1, 0), local.normalize());
-    this.clubBase.copy(q);
-    this.clubPivot.quaternion.copy(q);
-    this.arms.rotation.x = prev.a;
-    this.spine.rotation.y = prev.s;
-    this.hips.rotation.y = prev.h;
-  }
-  private clubBase = new THREE.Quaternion();
 
   /** Place the golfer so the club meets the ball, facing along the aim yaw. */
   placeAtBall(ball: THREE.Vector3, aimYaw: number, groundY: (x: number, z: number) => number) {
@@ -605,7 +615,7 @@ export class GolferModel {
   swing(onImpact: () => void, power = 1) {
     this.onImpact = onImpact;
     this.swingFrom = Math.max(this.back, 0.12);
-    this.follow = this.putter ? 0.45 + power * 0.25 : 1.4 + Math.min(1, power) * 1.1;
+    this.followAmt = this.putter ? 0.45 + Math.min(1, power) * 0.5 : Math.max(0.45, Math.min(1, 0.3 + power * 0.75));
     this.phase = 'downswing';
     this.phaseT = 0;
   }
@@ -633,48 +643,205 @@ export class GolferModel {
     this.autoCb = null;
   }
 
-  private applyPose(angle: number, hinge: number, twist: number) {
-    this.arms.rotation.x = angle;
-    const hingeQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), hinge);
-    this.clubPivot.quaternion.copy(hingeQ).multiply(this.clubBase);
-    this.spine.rotation.y = twist;
-    this.hips.rotation.y = twist * 0.35;
+  // ------------------------------------------------------------------ swing rig
+  // Root frame: +x toward the ball, +y up, target along -z (the golfer's lead side).
+  // A pose places the hips and shoulders (turning about the tilted spine), the hands on the swing
+  // path and the club shaft direction; the arms are then solved with two-bone IK.
+
+  private ballPos() {
+    return new THREE.Vector3(this.ballOffset, 0.03, 0);
+  }
+
+  private addressPose(): Pose {
+    const hands = new THREE.Vector3(0.38, 0.82, 0);
+    return { hipsYaw: 0, shoulderYaw: 0, bend: this.bend, headYaw: 0, hands, shaft: this.ballPos().sub(hands).normalize(), legTurn: 0 };
+  }
+
+  private impactPose(): Pose {
+    const hands = new THREE.Vector3(0.41, 0.84, -0.06);
+    return { hipsYaw: 0.5, shoulderYaw: 0.22, bend: this.bend + 0.03, headYaw: -0.22, hands, shaft: this.ballPos().sub(hands).normalize(), legTurn: 0.4 };
+  }
+
+  /** Backswing keyed to a real swing: takeaway, lead arm parallel (wrists set), top. */
+  private backKeys(): Array<[number, Pose]> {
+    const P = (h: number, s: number, hands: [number, number, number], shaft: [number, number, number], leg = 0): Pose => ({
+      hipsYaw: h, shoulderYaw: s, bend: this.bend, headYaw: -s * 0.85, hands: new THREE.Vector3(...hands), shaft: new THREE.Vector3(...shaft).normalize(), legTurn: leg,
+    });
+    return [
+      [0, this.addressPose()],
+      [0.3, P(-0.16, -0.55, [0.37, 0.9, 0.3], [0.12, -0.18, 1])],
+      [0.62, P(-0.45, -1.18, [0.24, 1.2, 0.44], [0.12, 1, 0.22], -0.12)],
+      [1.0, P(-0.78, -1.62, [0.1, 1.76, 0.32], [-0.25, -0.06, -1], -0.22)],
+      [1.12, P(-0.85, -1.8, [0.04, 1.8, 0.28], [-0.32, -0.38, -0.88], -0.26)],
+    ];
+  }
+
+  /** Follow-through: release (club parallel toward the target), arms up, high wrapped finish. */
+  private followKeys(): Array<[number, Pose]> {
+    const P = (h: number, s: number, bend: number, head: number, hands: [number, number, number], shaft: [number, number, number], leg: number): Pose => ({
+      hipsYaw: h, shoulderYaw: s, bend, headYaw: head, hands: new THREE.Vector3(...hands), shaft: new THREE.Vector3(...shaft).normalize(), legTurn: leg,
+    });
+    return [
+      [0, this.impactPose()],
+      [0.3, P(0.95, 0.95, -0.36, -0.55, [0.35, 0.98, -0.38], [0.12, 0.02, -1], 0.75)],
+      [0.62, P(1.3, 1.5, -0.24, -0.5, [0.14, 1.4, -0.42], [0.0, 1, -0.25], 1.0)],
+      [1.0, P(1.5, 1.9, -0.08, 0, [-0.2, 1.74, -0.1], [-0.5, -0.5, 0.7], 1.2)],
+    ];
+  }
+
+  private sample(keys: Array<[number, Pose]>, t: number): Pose {
+    t = Math.max(keys[0][0], Math.min(keys[keys.length - 1][0], t));
+    let i = 0;
+    while (i < keys.length - 2 && t > keys[i + 1][0]) i++;
+    const k0 = keys[Math.max(0, i - 1)][1], k1 = keys[i][1], k2 = keys[i + 1][1], k3 = keys[Math.min(keys.length - 1, i + 2)][1];
+    const u = (t - keys[i][0]) / (keys[i + 1][0] - keys[i][0] || 1);
+    const cr = (a: number, b: number, c: number, d: number) =>
+      0.5 * (2 * b + (-a + c) * u + (2 * a - 5 * b + 4 * c - d) * u * u + (-a + 3 * b - 3 * c + d) * u * u * u);
+    const v = (f: (p: Pose) => THREE.Vector3) =>
+      new THREE.Vector3(cr(f(k0).x, f(k1).x, f(k2).x, f(k3).x), cr(f(k0).y, f(k1).y, f(k2).y, f(k3).y), cr(f(k0).z, f(k1).z, f(k2).z, f(k3).z));
+    return {
+      hipsYaw: cr(k0.hipsYaw, k1.hipsYaw, k2.hipsYaw, k3.hipsYaw),
+      shoulderYaw: cr(k0.shoulderYaw, k1.shoulderYaw, k2.shoulderYaw, k3.shoulderYaw),
+      bend: cr(k0.bend, k1.bend, k2.bend, k3.bend),
+      headYaw: cr(k0.headYaw, k1.headYaw, k2.headYaw, k3.headYaw),
+      hands: v((p) => p.hands),
+      // slerp-like: normalised Catmull-Rom of the direction keeps the club sweeping smoothly
+      shaft: v((p) => p.shaft).normalize(),
+      legTurn: cr(k0.legTurn, k1.legTurn, k2.legTurn, k3.legTurn),
+    };
+  }
+
+  private mixPose(a: Pose, b: Pose, k: number): Pose {
+    const l = (x: number, y: number) => x + (y - x) * k;
+    return {
+      hipsYaw: l(a.hipsYaw, b.hipsYaw), shoulderYaw: l(a.shoulderYaw, b.shoulderYaw), bend: l(a.bend, b.bend), headYaw: l(a.headYaw, b.headYaw),
+      hands: a.hands.clone().lerp(b.hands, k), shaft: a.shaft.clone().lerp(b.shaft, k).normalize(), legTurn: l(a.legTurn, b.legTurn),
+    };
+  }
+
+  /** Putting stroke: shoulders rock, wrists stay quiet. b > 0 back, b < 0 through. */
+  private puttPose(b: number): Pose {
+    const hands = new THREE.Vector3(0.38, 0.82 + Math.abs(b) * 0.025, b * 0.17);
+    const head = this.ballPos().add(new THREE.Vector3(0, Math.abs(b) * 0.04, b * 0.34));
+    return { hipsYaw: 0, shoulderYaw: -b * 0.22, bend: this.bend, headYaw: b * 0.18, hands, shaft: head.sub(hands).normalize(), legTurn: 0 };
+  }
+
+  private v = new THREE.Vector3();
+  private tmpM = new THREE.Matrix4();
+  private tmpQ = new THREE.Quaternion();
+
+  private shoulderPos(side: number): THREE.Vector3 {
+    const w = this.spine.localToWorld(new THREE.Vector3(0, 0.5, side * this.shoulderW));
+    return this.root.worldToLocal(w);
+  }
+
+  private placeLimb(mesh: THREE.Mesh, a: THREE.Vector3, b: THREE.Vector3) {
+    const d = this.v.copy(b).sub(a);
+    const len = d.length() || 1e-4;
+    mesh.position.copy(a);
+    mesh.quaternion.setFromUnitVectors(UP, d.divideScalar(len));
+    mesh.scale.set(1, len, 1);
+  }
+
+  /** Two-bone IK: returns elbow and reached hand position. */
+  private solveArm(S: THREE.Vector3, T: THREE.Vector3, pole: THREE.Vector3) {
+    const L1 = ARM_UPPER, L2 = ARM_FORE;
+    const d = T.clone().sub(S);
+    let dist = d.length();
+    const dir = d.divideScalar(dist || 1);
+    dist = Math.max(0.12, Math.min(L1 + L2 - 1e-4, dist));
+    const hand = S.clone().addScaledVector(dir, dist);
+    const a = (L1 * L1 - L2 * L2 + dist * dist) / (2 * dist);
+    const h = Math.sqrt(Math.max(0, L1 * L1 - a * a));
+    const p = pole.clone().addScaledVector(dir, -pole.dot(dir));
+    if (p.lengthSq() < 1e-6) p.set(0, -1, 0);
+    p.normalize();
+    const elbow = S.clone().addScaledVector(dir, a).addScaledVector(p, h);
+    return { elbow, hand };
+  }
+
+  private pose(p: Pose) {
+    if (!this.armRig.length) return;
+    this.hips.rotation.y = p.hipsYaw;
+    this.spine.rotation.z = p.bend;
+    this.spine.rotation.y = p.shoulderYaw - p.hipsYaw;
+    this.head.rotation.y = p.headYaw;
+    // feet stay planted; knees and hips turn
+    if (this.legs[0]) this.legs[0].rotation.y = p.legTurn * 0.5 + p.hipsYaw * 0.15;
+    if (this.legs[1]) this.legs[1].rotation.y = p.legTurn * 0.9;
+    this.root.updateMatrixWorld(true);
+
+    const lead = this.armRig[0], trail = this.armRig[1];
+    const Sl = this.shoulderPos(-1), St = this.shoulderPos(1);
+    const L = this.solveArm(Sl, p.hands, LEAD_POLE);
+    const trailTarget = L.hand.clone().addScaledVector(p.shaft, 0.075);
+    const T = this.solveArm(St, trailTarget, TRAIL_POLE);
+    for (const [rig, S, sol] of [[lead, Sl, L], [trail, St, T]] as const) {
+      rig.shoulderJoint.position.copy(S);
+      this.placeLimb(rig.upper, S, sol.elbow);
+      rig.elbowJoint.position.copy(sol.elbow);
+      this.placeLimb(rig.fore, sol.elbow, sol.hand);
+      rig.hand.position.copy(sol.hand);
+    }
+    if (this.wristAcc) {
+      this.wristAcc.position.copy(L.hand).lerp(L.elbow, 0.2);
+      this.wristAcc.quaternion.copy(lead.fore.quaternion);
+      this.wristAcc.rotateX(Math.PI / 2);
+    }
+    // club: grip end just above the lead hand, shaft along the pose direction, face turning with the chest
+    const yc = p.shaft.clone().negate();
+    const ref = new THREE.Vector3(-Math.sin(p.shoulderYaw), 0, -Math.cos(p.shoulderYaw));
+    let xc = ref.clone().cross(yc);
+    if (xc.lengthSq() < 1e-4) xc = new THREE.Vector3(1, 0, 0).cross(yc);
+    xc.normalize();
+    const zc = xc.clone().cross(yc).normalize();
+    this.tmpM.makeBasis(xc, yc, zc);
+    this.tmpQ.setFromRotationMatrix(this.tmpM);
+    this.clubPivot.quaternion.copy(this.tmpQ);
+    this.clubPivot.position.copy(L.hand).addScaledVector(p.shaft, -0.05);
+  }
+
+  private downPose(e: number): Pose {
+    // hips start the downswing, then the shoulders and arms follow into impact
+    const b = this.swingFrom * (1 - e * e * (3 - 2 * e));
+    const from = this.sample(this.backKeys(), b);
+    const imp = this.impactPose();
+    const pose = this.mixPose(from, imp, Math.pow(e, 2.2));
+    pose.hipsYaw = from.hipsYaw + (imp.hipsYaw - from.hipsYaw) * Math.min(1, e * 1.6);
+    return pose;
   }
 
   update(dt: number) {
     this.time += dt;
     this.phaseT += dt;
-    const fb = this.putter ? 0.42 : this.fullBack;
-    const hingeMax = this.putter ? 0 : -1.1;
-    const twistMax = this.putter ? -0.08 : -0.85;
     switch (this.phase) {
       case 'idle':
       case 'address': {
-        const sway = Math.sin(this.time * 1.6) * 0.02;
-        this.applyPose(sway, 0, sway * 0.5);
+        const p = this.putter ? this.puttPose(0) : this.addressPose();
+        p.hands.z += Math.sin(this.time * 1.6) * 0.01;
+        p.shoulderYaw += Math.sin(this.time * 1.6) * 0.015;
+        this.pose(p);
         break;
       }
       case 'backswing': {
         if (this.autoCb) {
           const target = Math.min(1.05, this.autoTarget);
-          const dur = this.putter ? 0.6 : 0.85;
-          this.back = target * Math.min(1, this.phaseT / dur);
-          if (this.phaseT > dur + 0.2) {
+          const dur = this.putter ? 0.6 : 0.9;
+          const k = Math.min(1, this.phaseT / dur);
+          this.back = target * (1 - (1 - k) * (1 - k));
+          if (this.phaseT > dur + 0.15) {
             const cb = this.autoCb;
             this.autoCb = null;
             this.swing(cb, target);
           }
         }
-        const b = this.back;
-        this.applyPose(-fb * b, hingeMax * Math.min(1, b * 1.3), twistMax * b);
+        this.pose(this.putter ? this.puttPose(this.back) : this.sample(this.backKeys(), this.back));
         break;
       }
       case 'downswing': {
-        const dur = this.putter ? 0.28 : 0.2;
+        const dur = this.putter ? 0.3 : 0.24;
         const k = Math.min(1, this.phaseT / dur);
-        const e = k * k;
-        const b = this.swingFrom * (1 - e);
-        this.applyPose(-fb * b, hingeMax * Math.min(1, b * 1.3) * (1 - e * 0.6), twistMax * b);
+        this.pose(this.putter ? this.puttPose(this.swingFrom * (1 - k)) : this.downPose(k));
         if (k >= 1) {
           this.phase = 'follow';
           this.phaseT = 0;
@@ -685,11 +852,10 @@ export class GolferModel {
         break;
       }
       case 'follow': {
-        const dur = this.putter ? 0.4 : 0.38;
+        const dur = this.putter ? 0.45 : 0.6;
         const k = Math.min(1, this.phaseT / dur);
-        const e = 1 - (1 - k) * (1 - k);
-        const a = this.follow * e;
-        this.applyPose(a, this.putter ? 0 : 0.9 * e, (this.putter ? 0.1 : 1.15) * e);
+        const e = 1 - Math.pow(1 - k, 2.4);
+        this.pose(this.putter ? this.puttPose(-this.followAmt * e) : this.sample(this.followKeys(), this.followAmt * e));
         if (k >= 1) {
           this.phase = 'finish';
           this.phaseT = 0;
@@ -697,20 +863,20 @@ export class GolferModel {
         break;
       }
       case 'finish': {
-        const a = this.follow;
-        this.applyPose(a, this.putter ? 0 : 0.9, this.putter ? 0.1 : 1.15);
+        this.pose(this.putter ? this.puttPose(-this.followAmt) : this.sample(this.followKeys(), this.followAmt));
         break;
       }
       case 'celebrate': {
-        const k = Math.sin(Math.min(1, this.phaseT / 0.3) * Math.PI * 0.5);
-        this.applyPose(1.9 * k + Math.sin(this.phaseT * 9) * 0.15 * k, 0, 0.3 * k);
-        this.root.position.y += Math.max(0, Math.sin(this.phaseT * 9)) * 0.004;
+        const k = Math.min(1, this.phaseT / 0.3);
+        const hop = Math.abs(Math.sin(this.phaseT * 8)) * 0.05 * k;
+        const up: Pose = { hipsYaw: 0.3, shoulderYaw: 0.4, bend: -0.1, headYaw: -0.2, hands: new THREE.Vector3(0.28, 1.85 + hop, -0.05), shaft: new THREE.Vector3(0.1, 1, -0.3).normalize(), legTurn: 0.3 };
+        this.pose(this.mixPose(this.sample(this.followKeys(), this.followAmt), up, k));
         break;
       }
       case 'sad': {
         const k = Math.min(1, this.phaseT / 0.4);
-        this.applyPose(0.2 * k, 0, -0.2 * k);
-        this.head.rotation.x = Math.sin(this.time * 3) * 0.2 * k;
+        const down: Pose = { hipsYaw: 0.2, shoulderYaw: 0.15, bend: -0.6, headYaw: Math.sin(this.time * 3) * 0.25, hands: new THREE.Vector3(0.36, 0.72, 0), shaft: new THREE.Vector3(0.35, -1, 0.05).normalize(), legTurn: 0.1 };
+        this.pose(this.mixPose(this.sample(this.followKeys(), this.followAmt), down, k));
         break;
       }
     }

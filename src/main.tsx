@@ -1,6 +1,10 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { host } from './game/renderer';
+
+// handle for automated tests / debugging
+(window as any).__flHost = host;
 import '@fontsource/press-start-2p/latin-400.css';
 import '@fontsource/jersey-10/latin-400.css';
 import './styles.css';
