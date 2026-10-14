@@ -7,6 +7,7 @@ import { useStore, type Screen } from '../../state/store';
 import { Coins, LevelPill } from '../components/common';
 import { startQuickMatch } from './PlaySetup';
 import { InstallTip } from '../components/InstallTip';
+import { PixelIcon, type IconName } from '../components/PixelIcon';
 
 export function MainMenu() {
   const p = useStore((s) => s.profile);
@@ -17,15 +18,15 @@ export function MainMenu() {
   const ev = currentEvent();
   const days = Math.max(1, Math.ceil((eventEndsAt().getTime() - Date.now()) / 86400000));
   const last = p.matchHistory[0];
-  const tiles: Array<{ id: Screen; label: string; ico: string; badge?: number }> = [
-    { id: 'courses', label: 'Courses', ico: '🗺️' },
-    { id: 'bag', label: 'Golf Bag', ico: '🏌️', badge: newClubs },
-    { id: 'packs', label: 'Club Packs', ico: '🎁' },
-    { id: 'character', label: 'Character', ico: '🧢' },
-    { id: 'shop', label: 'Shop', ico: '🛍️' },
-    { id: 'challenges', label: 'Challenges', ico: '📅', badge: claimableCh },
-    { id: 'progress', label: 'Achievements', ico: '🏆', badge: claimableAch },
-    { id: 'settings', label: 'Settings', ico: '⚙️' },
+  const tiles: Array<{ id: Screen; label: string; ico: IconName; badge?: number }> = [
+    { id: 'courses', label: 'Courses', ico: 'map' },
+    { id: 'bag', label: 'Golf Bag', ico: 'bag', badge: newClubs },
+    { id: 'packs', label: 'Club Packs', ico: 'gift' },
+    { id: 'character', label: 'Character', ico: 'cap' },
+    { id: 'shop', label: 'Shop', ico: 'shop' },
+    { id: 'challenges', label: 'Challenges', ico: 'calendar', badge: claimableCh },
+    { id: 'progress', label: 'Achievements', ico: 'trophy', badge: claimableAch },
+    { id: 'settings', label: 'Settings', ico: 'gear' },
   ];
   const nav = (s: Screen) => {
     sound.play('click');
@@ -42,14 +43,14 @@ export function MainMenu() {
         <div className="menu-left">
           <div className="logo">Fairway<span>Legends</span></div>
           <InstallTip />
-          <button className="btn primary play-btn" onClick={() => nav('play')}>⛳ Play Golf</button>
+          <button className="btn primary play-btn" onClick={() => nav('play')}><PixelIcon name="flag" size={30} /> Play Golf</button>
           <button className="btn blue" onClick={() => { sound.play('click'); startQuickMatch(); }}>
-            ⚡ Quick 3-Hole Match {last ? `· ${courseById(last.courseId).name}` : ''}
+            <PixelIcon name="bolt" size={20} /> Quick 3-Hole Match {last ? `· ${courseById(last.courseId).name}` : ''}
           </button>
           <div className="menu-grid">
             {tiles.map((t) => (
               <button key={t.id} className="menu-tile" onClick={() => nav(t.id)}>
-                <span className="ico">{t.ico}</span>
+                <span className="ico"><PixelIcon name={t.ico} size={26} /></span>
                 {t.label}
                 {!!t.badge && <span className="badge">{t.badge}</span>}
               </button>

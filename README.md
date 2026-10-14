@@ -1,6 +1,6 @@
 # Fairway Legends ⛳
 
-A complete, original 3D arcade golf game for the browser. Pull back and release to swing, compete against AI rivals with their own personalities, earn coins, open club packs, collect 59 clubs with unique abilities, unlock four courses and dress up your golfer.
+A complete, original 3D arcade golf game for the browser, in an 8-bit pixel-art style. Pull back and release to swing, compete against AI rivals with their own personalities, earn coins, open club packs, collect 59 clubs with unique abilities, unlock four courses and dress up your golfer.
 
 Built with **TypeScript + React + Vite + Three.js**. It needs no backend, no account and no paid services. Everything runs client-side, and progress is saved in the browser.
 
@@ -95,11 +95,12 @@ Player XP and levels unlock courses, opponent difficulties, shot shaping, trajec
 * 60+ purchasable items across hats, shirts (polo, tee, stripes, argyle, floral, flame, vest), trousers/shorts/skorts/plaid, shoes, gloves, glasses, accessories (watch, chain, towel, scarf, cape…) and golf bags. Items carry rarity and collection labels.
 * Rotatable 3D preview with try-on before buying. Cosmetics are purely visual and are shown on your golfer during play. Bots wear outfits from the same system.
 
-### Presentation
-* Three.js scene: sky dome shader, fog, hemisphere and sun lighting with a shadow camera that follows the action, painted surface textures (mowing stripes, anti-aliased edges), animated water shader, instanced trees/rocks/grass, OOB stakes, waving flag, distant mountains/mesas, clouds and a lighthouse on the coast.
-* Cameras: hole fly-over intro, behind-the-ball, target, green, overview, ball-follow and landing cameras with smooth damping.
-* HUD: hole card, live leaderboard, wind compass, mini-map (tap to aim), club selector, lie/elevation/carry chips, ability status, power bar and timing arc, shot messages (PERFECT, ability activated, Birdie…), hole summaries with commentary, scorecard and a final results screen with a reward breakdown.
-* Synthesised Web Audio sound effects and ambient music (no audio files), each with an on/off setting.
+### 8-bit presentation
+* **Pixel pipeline:** the 3D world renders into a low-resolution target (about 210 game pixels on the short side by default) and is scaled up with crisp, square pixels. A post-process pass tone maps each pixel, applies 4×4 ordered (Bayer) dithering and snaps it to a fixed 50-colour retro palette (Endesga-32 plus extra greens, sky blues and sands). The sky is drawn in flat colour bands and shadows are hard-edged. *Settings → 8-bit pixel look* switches between Chunky, Classic and Fine pixels, or Off for the smooth renderer. Bigger pixels also make it cheaper to run on phones.
+* **Pixel UI:** Press Start 2P for titles and Jersey 10 for text, both bundled with the app (SIL Open Font License) so they work offline. Panels and buttons are square, bevelled boxes that press in, with hard drop shadows in the same palette. There are pixel-art icons (coins, menu tiles, packs, swing ball, camera), a blocky timing arc and segmented power and stat bars. In-world labels are drawn at native pixel size so they stay sharp.
+* **Chiptune audio:** a looping NES-style track (two pulse voices, triangle bass, noise drums) and 8-bit sound effects. Everything is synthesised live with Web Audio; there are no audio files.
+* Three.js scene: instanced low-poly trees/rocks/grass, animated water shader, waving flag, distant mountains, mesas and a lighthouse. Cameras include a hole fly-over intro plus behind-the-ball, target, green, overview, ball-follow and landing views.
+* HUD: hole card, live leaderboard, wind compass, mini-map (tap to aim), club selector, lie/elevation/carry chips, ability status, timing arc and power bar, shot messages, hole summaries with commentary, scorecard and a final results screen with a reward breakdown.
 
 ### Saving (`src/state/`)
 * Saved automatically to `localStorage` (versioned format, migrations in `MIGRATIONS`, validation and repair of damaged data, automatic backup copy, graceful handling of storage errors and private mode).

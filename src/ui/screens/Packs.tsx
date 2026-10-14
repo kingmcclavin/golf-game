@@ -8,6 +8,7 @@ import { levelFromXp } from '../../data/progression';
 import type { GrantResult } from '../../state/profile';
 import { useStore } from '../../state/store';
 import { ClubCard, Coins, Modal, Toggle, TopBar } from '../components/common';
+import { PixelIcon } from '../components/PixelIcon';
 
 interface Opening {
   pack: PackDef;
@@ -16,6 +17,8 @@ interface Opening {
   stage: 'pack' | 'reveal' | 'summary';
   idx: number;
 }
+
+const SHORT: Record<Rarity, string> = { common: 'Com', uncommon: 'Unc', rare: 'Rare', epic: 'Epic', legendary: 'Leg' };
 
 const best = (rs: PackReward[]): Rarity => rs.reduce<Rarity>((b, r) => (RARITIES.indexOf(r.rarity) > RARITIES.indexOf(b) ? r.rarity : b), 'common');
 
@@ -55,13 +58,13 @@ export function PacksScreen() {
             return (
               <div key={pk.id} className={`card ${locked ? 'locked' : ''}`}>
                 <div className="pack-art" style={{ background: `radial-gradient(circle at 50% 40%, ${pk.color[0]}55, transparent 70%), linear-gradient(160deg, ${pk.color[1]}, #0a1c1c)` }}>
-                  <div className="pk" style={{ background: `linear-gradient(160deg, ${pk.color[0]}, ${pk.color[1]})` }}>{pk.event ? '🎉' : pk.id === 'elite' ? '💎' : pk.id === 'premium' ? '⭐' : '🎁'}</div>
+                  <div className="pk" style={{ background: `linear-gradient(160deg, ${pk.color[0]}, ${pk.color[1]})` }}><PixelIcon name={pk.event ? 'trophy' : pk.id === 'elite' ? 'gem' : pk.id === 'premium' ? 'star' : 'gift'} size={48} /></div>
                 </div>
                 <div className="row"><h3 className="grow">{pk.event ? `${ev.name} Pack` : pk.name}</h3><span className="tag">{pk.clubs} clubs</span></div>
                 <div className="muted" style={{ fontSize: 13, margin: '4px 0' }}>{pk.desc}{pk.event ? ` ${pk.eventChance}% per slot for an event club (${ev.name}), ${pk.cosmeticChance}% chance of a bonus event cosmetic.` : ''}</div>
                 <div className="odds">
                   {RARITIES.map((r) => (
-                    <div key={r}><div className={`r-${r}`} style={{ fontFamily: 'var(--display)', fontSize: 13 }}>{pk.odds[r]}%</div><div className="muted">{RARITY_INFO[r].label}</div></div>
+                    <div key={r}><div className={`r-${r}`} style={{ fontFamily: 'var(--display)', fontSize: 13 }}>{pk.odds[r]}%</div><div className="muted" title={RARITY_INFO[r].label}>{SHORT[r]}</div></div>
                   ))}
                 </div>
                 <button className="btn primary" style={{ width: '100%' }} disabled={locked || p.coins < pk.price} onClick={() => { sound.play('click'); setConfirm(pk); }}>
@@ -87,7 +90,7 @@ export function PacksScreen() {
           <h2>Buy {confirm.event ? `${ev.name} Pack` : confirm.name}?</h2>
           <p className="muted">Contains {confirm.clubs} clubs. Duplicates become upgrade material, or coins once a club is maxed.</p>
           <div className="odds">
-            {RARITIES.map((r) => (<div key={r}><div className={`r-${r}`}>{confirm.odds[r]}%</div><div className="muted">{RARITY_INFO[r].label}</div></div>))}
+            {RARITIES.map((r) => (<div key={r}><div className={`r-${r}`}>{confirm.odds[r]}%</div><div className="muted" title={RARITY_INFO[r].label}>{SHORT[r]}</div></div>))}
           </div>
           <div className="row" style={{ justifyContent: 'space-between', marginTop: 10 }}>
             <span>Balance after: <Coins n={p.coins - confirm.price} /></span>
@@ -145,7 +148,7 @@ function PackOpening({ o, setO }: { o: Opening; setO: (o: Opening | null) => voi
     return (
       <div className="opening" onClick={openPack}>
         <div className="burst" style={{ background: `repeating-conic-gradient(from 0deg, ${RARITY_INFO[top === 'legendary' || top === 'epic' ? 'rare' : 'common'].color}22 0deg 10deg, transparent 10deg 20deg)` }} />
-        <div className="big-pack" style={{ background: `linear-gradient(160deg, ${o.pack.color[0]}, ${o.pack.color[1]})` }}>🎁</div>
+        <div className="big-pack" style={{ background: `linear-gradient(160deg, ${o.pack.color[0]}, ${o.pack.color[1]})` }}><PixelIcon name="gift" size={90} /></div>
         <h2 style={{ marginTop: 24 }}>Tap to open!</h2>
         <button className="btn small" style={{ marginTop: 12 }} onClick={(e) => { e.stopPropagation(); setO({ ...o, stage: 'summary' }); }}>Skip</button>
       </div>

@@ -26,6 +26,8 @@ export default function App() {
     sound.setVolume(settings.volume);
     sound.setMusic(settings.music);
     if (host.quality !== settings.quality) host.applyQuality(settings.quality);
+    if (host.retro !== settings.retro) host.applyRetro(settings.retro);
+    document.documentElement.dataset.retro = settings.retro;
   }, [settings]);
 
   useEffect(() => {

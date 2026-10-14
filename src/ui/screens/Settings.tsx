@@ -40,6 +40,9 @@ export function SettingsScreen() {
         <div className="setting"><span>Volume</span>
           <input type="range" min={0} max={1} step={0.05} value={st.volume} onChange={(e) => upd({ volume: Number(e.target.value) })} onPointerUp={() => sound.play('coin')} style={{ width: 180 }} />
         </div>
+        <div className="setting"><span>8-bit pixel look<div className="muted" style={{ fontSize: 12 }}>Retro palette and pixel size for the 3D world. Bigger pixels also run faster.</div></span>
+          <Seg value={st.retro} options={[['chunky', 'Chunky'], ['classic', 'Classic'], ['fine', 'Fine'], ['off', 'Off']]} onChange={(v) => upd({ retro: v })} />
+        </div>
         <div className="setting"><span>Graphics quality<div className="muted" style={{ fontSize: 12 }}>Low disables shadows and grass for older phones. Current: {Math.round(host.fps)} fps</div></span>
           <Seg value={st.quality} options={[['low', 'Low'], ['medium', 'Medium'], ['high', 'High']]} onChange={(v) => upd({ quality: v })} />
         </div>

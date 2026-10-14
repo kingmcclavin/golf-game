@@ -24,9 +24,12 @@ export function makeSky(top: string, bottom: string, sunDir: THREE.Vector3): THR
       varying vec3 vDir;
       void main() {
         float h = clamp(vDir.y, -0.2, 1.0);
-        vec3 c = mix(bottom, top, pow(max(h, 0.0), 0.55));
+        float k = pow(max(h, 0.0), 0.55);
+        // retro: flat horizontal colour bands like an 8-bit sky
+        k = floor(k * 6.0 + 0.5) / 6.0;
+        vec3 c = mix(bottom, top, k);
         float s = max(dot(normalize(vDir), sunDir), 0.0);
-        c += vec3(1.0, 0.95, 0.8) * (pow(s, 600.0) * 1.6 + pow(s, 12.0) * 0.18);
+        c += vec3(1.0, 0.95, 0.8) * step(0.9985, s) * 1.6;
         gl_FragColor = vec4(c, 1.0);
         #include <colorspace_fragment>
       }`,

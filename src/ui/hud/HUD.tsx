@@ -11,6 +11,7 @@ import { ACHIEVEMENTS } from '../../data/achievements';
 import { courseById } from '../../data/courses';
 import { Minimap } from './Minimap';
 import { usePhonePortrait } from '../hooks';
+import { PixelIcon } from '../components/PixelIcon';
 import { SwingPad } from './SwingPad';
 
 const LIE_LABEL: Record<string, string> = {
@@ -71,7 +72,7 @@ export function HUD({ ctl, onQuit, onAgain }: { ctl: MatchController; onQuit: ()
         {h.phase !== 'loading' && <Minimap ctl={ctl} />}
         <div className="col" style={{ gap: 6 }}>
           <button className="btn icon pe" aria-label="Pause" onClick={() => { sound.play('click'); setPaused(true); }}><svg width="16" height="18" viewBox="0 0 16 18"><rect x="1" y="1" width="5" height="16" rx="1.5" fill="#fff" /><rect x="10" y="1" width="5" height="16" rx="1.5" fill="#fff" /></svg></button>
-          {aiming && <button className="btn icon pe" aria-label="Camera" onClick={() => ctl.cycleCamera()}>🎥</button>}
+          {aiming && <button className="btn icon pe" aria-label="Camera" onClick={() => ctl.cycleCamera()}><PixelIcon name="camera" size={22} /></button>}
         </div>
       </div>
 
@@ -80,7 +81,7 @@ export function HUD({ ctl, onQuit, onAgain }: { ctl: MatchController; onQuit: ()
           {aiming && club && !pulling && (
             <div className="p-info">
               <div className="row wrap" style={{ gap: 5, justifyContent: 'center' }}>
-                <span className="info-chip">⛳ {fmtDist(h.distToPin)}</span>
+                <span className="info-chip"><PixelIcon name="pin" size={13} /> {fmtDist(h.distToPin)}</span>
                 {h.shotType && <span className="info-chip" style={{ color: '#ffe9a0' }}>{h.shotType}</span>}
                 <span className="info-chip">{LIE_LABEL[h.lie]}{h.liePenalty > 0.01 ? ` −${Math.round(h.liePenalty * 100)}%` : ''}</span>
                 {Math.abs(h.elevation) > 1 && <span className="info-chip">{h.elevation > 0 ? '▲' : '▼'} {Math.round(Math.abs(h.elevation) * 3.28)} ft</span>}
@@ -137,7 +138,7 @@ export function HUD({ ctl, onQuit, onAgain }: { ctl: MatchController; onQuit: ()
       {aiming && club && (
         <div className="hud-left">
           <div className="row wrap" style={{ gap: 6 }}>
-            <span className="info-chip">⛳ {fmtDist(h.distToPin)}</span>
+            <span className="info-chip"><PixelIcon name="pin" size={13} /> {fmtDist(h.distToPin)}</span>
             {h.shotType && <span className="info-chip" style={{ color: '#ffe9a0' }}>{h.shotType}</span>}
             <span className="info-chip">{LIE_LABEL[h.lie]}{h.liePenalty > 0.01 ? ` −${Math.round(h.liePenalty * 100)}%` : ''}</span>
             {Math.abs(h.elevation) > 1 && <span className="info-chip">{h.elevation > 0 ? '▲' : '▼'} {Math.round(Math.abs(h.elevation) * 3.28)} ft</span>}

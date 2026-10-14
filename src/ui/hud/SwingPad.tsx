@@ -1,6 +1,9 @@
 import { useRef, useState } from 'react';
 import type { MatchController } from '../../game/matchController';
 import { sound } from '../../audio/sound';
+import { PixelIcon, pixelBallGrid } from '../components/PixelIcon';
+
+const BALL = pixelBallGrid(16);
 import { useHud, useSwing } from '../../state/matchStore';
 
 /** Pull-back-and-release swing control: press the ball, drag down for power, release to hit. */
@@ -62,7 +65,7 @@ export function SwingPad({ ctl }: { ctl: MatchController }) {
         role="button"
       >
         {enabled && <div className="pad-ring" />}
-        <div className="ballbtn">{enabled ? <>PULL<br />▼</> : '···'}</div>
+        <div className="ballbtn"><PixelIcon grid={BALL} size={92} />{enabled ? <span>PULL<br />▼</span> : '···'}</div>
       </div>
       {drag && <PullLine {...drag} />}
       <PowerMeter />
@@ -92,32 +95,33 @@ function PowerMeter() {
     const a = -half + v * half; // -1..1 -> -90..90 deg from vertical
     return [115 + Math.sin(a) * r, 110 - Math.cos(a) * r];
   };
-  const arc = (a: number, b: number, color: string, w = 16) => {
-    const [x1, y1] = toXY(a);
-    const [x2, y2] = toXY(b);
-    return <path d={`M ${x1} ${y1} A ${R} ${R} 0 0 1 ${x2} ${y2}`} stroke={color} strokeWidth={w} fill="none" />;
-  };
   const good = Math.min(1, perfectWindow * 2.6);
-  const [nx, ny] = toXY(Math.max(-1, Math.min(1, needle)), R + 14);
   const inPerfect = Math.abs(needle) <= perfectWindow;
   const over = power > 1;
   return (
     <div className="meter needle-wrap">
       <div className="col" style={{ alignItems: 'center', gap: 4 }}>
-        <svg width={230} height={124} style={{ overflow: 'visible' }}>
-          {arc(-1, 1, 'rgba(255,90,90,0.75)')}
-          {arc(-good, good, 'rgba(255,210,58,0.9)')}
-          {arc(-perfectWindow, perfectWindow, '#4cd17a', 20)}
-          <line x1={115} y1={110} x2={nx} y2={ny} stroke={inPerfect ? '#b8ffd0' : '#fff'} strokeWidth={5} strokeLinecap="round" />
-          <circle cx={115} cy={110} r={7} fill="#fff" />
-          <text x={115} y={84} textAnchor="middle" fill="#fff" fontSize={22} fontFamily="var(--display)">
-            {isPutt ? `${Math.round(puttFeet)} ft` : `${Math.round(power * 100)}%`}
+        <svg width={230} height={124} style={{ overflow: 'visible' }} shapeRendering="crispEdges">
+          {/* the arc is drawn as chunky blocks: red edges, yellow "good" band, green perfect zone */}
+          {Array.from({ length: 29 }, (_, i) => {
+            const v = -1 + (i / 28) * 2;
+            const [x, y] = toXY(v);
+            const col = Math.abs(v) <= perfectWindow ? '#63c74d' : Math.abs(v) <= good ? '#fee761' : '#e43b44';
+            return <rect key={i} x={Math.round(x / 4) * 4 - 7} y={Math.round(y / 4) * 4 - 7} width={14} height={14} fill={col} stroke="#181425" strokeWidth={3} />;
+          })}
+          {[0.25, 0.45, 0.65, 0.85, 1.05].map((k, i) => {
+            const [x, y] = toXY(Math.max(-1, Math.min(1, needle)), R * k);
+            return <rect key={i} x={Math.round(x / 4) * 4 - 4} y={Math.round(y / 4) * 4 - 4} width={8} height={8} fill={inPerfect ? '#63c74d' : '#ffffff'} stroke="#181425" strokeWidth={2} />;
+          })}
+          <rect x={107} y={102} width={16} height={16} fill="#feae34" stroke="#181425" strokeWidth={3} />
+          <text x={115} y={84} textAnchor="middle" fill="#fff" fontSize={16} fontFamily="var(--title)" stroke="#181425" strokeWidth={4} paintOrder="stroke">
+            {isPutt ? `${Math.round(puttFeet)}FT` : `${Math.round(power * 100)}%`}
           </text>
           {!isPutt && preview && (
-            <text x={115} y={60} textAnchor="middle" fill="#cfe" fontSize={14} fontFamily="var(--body)">{Math.round(preview.carry * 1.0936)} yd carry</text>
+            <text x={115} y={58} textAnchor="middle" fill="#2ce8f5" fontSize={16} fontFamily="var(--display)" fontWeight={700} stroke="#181425" strokeWidth={4} paintOrder="stroke">{Math.round(preview.carry * 1.0936)} yd carry</text>
           )}
         </svg>
-        <div style={{ fontSize: 13, color: over ? '#ff8a8a' : '#cfe' }}>{over ? 'OVERPOWER! Riskier timing' : 'Release in the green'}</div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: over ? '#e43b44' : '#fff', textShadow: '2px 2px 0 #181425' }}>{over ? 'OVERPOWER! Riskier timing' : 'Release in the green'}</div>
       </div>
       <div className="power-bar">
         <div className="fill" style={{ height: `${Math.min(1, power / 1.1) * 100}%` }} />

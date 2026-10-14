@@ -26,6 +26,7 @@ export interface Settings {
   showSlopeGrid: boolean;
   haptics: boolean;
   fastPacks: boolean;
+  retro: 'off' | 'fine' | 'classic' | 'chunky';
 }
 
 export interface MatchRecord {
@@ -62,7 +63,7 @@ export interface Profile {
 }
 
 export const defaultSettings = (): Settings => ({
-  sfx: true, music: true, volume: 0.7, quality: 'medium', botSpeed: 'fast', showSlopeGrid: true, haptics: true, fastPacks: false,
+  sfx: true, music: true, volume: 0.7, quality: 'medium', botSpeed: 'fast', showSlopeGrid: true, haptics: true, fastPacks: false, retro: 'classic',
 });
 
 export function newProfile(now = Date.now()): Profile {

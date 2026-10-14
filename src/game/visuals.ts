@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { host } from './renderer';
 
 let dotTex: THREE.Texture | null = null;
 export function dotTexture(): THREE.Texture {
@@ -168,16 +169,50 @@ export class Particles {
 }
 
 /** Floating label sprite with constant screen size. */
-export function labelSprite(text: string, bg: string, fg = '#ffffff', scale = 0.05): THREE.Sprite {
+export const LABEL_FONT = () => (document.documentElement.dataset.retro && document.documentElement.dataset.retro !== 'off' ? '32px "Press Start 2P", monospace' : 'bold 40px system-ui, sans-serif');
+
+/** Retro labels: draw at the game's native pixel size (8px font) so they stay perfectly crisp. */
+function retroLabel(text: string, bg: string, fg: string): THREE.Sprite {
   const c = document.createElement('canvas');
   const g = c.getContext('2d')!;
-  g.font = 'bold 40px system-ui, sans-serif';
+  g.font = '8px "Press Start 2P", monospace';
+  const w = Math.ceil(g.measureText(text).width) + 6;
+  c.width = w;
+  c.height = 12;
+  g.font = '8px "Press Start 2P", monospace';
+  g.fillStyle = '#181425';
+  g.fillRect(0, 0, w, 12);
+  g.fillStyle = bg;
+  g.fillRect(1, 1, w - 2, 10);
+  g.fillStyle = fg;
+  g.textBaseline = 'top';
+  g.fillText(text, 3, 2);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.magFilter = THREE.NearestFilter;
+  tex.minFilter = THREE.NearestFilter;
+  tex.generateMipmaps = false;
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, sizeAttenuation: false }));
+  const bufH = host.renderer?.getDrawingBufferSize(new THREE.Vector2()).y ?? 240;
+  // sprite scale is a fraction of the viewport height: one texel = one game pixel
+  s.scale.set((w / bufH) * 1, (12 / bufH) * 1, 1);
+  s.renderOrder = 30;
+  s.center.set(0.5, 0);
+  return s;
+}
+
+export function labelSprite(text: string, bg: string, fg = '#ffffff', scale = 0.05): THREE.Sprite {
+  const retro = document.documentElement.dataset.retro && document.documentElement.dataset.retro !== 'off';
+  if (retro) return retroLabel(text.replace('⛳ ', ''), bg.startsWith('rgba') ? '#262b44' : bg, fg);
+  const c = document.createElement('canvas');
+  const g = c.getContext('2d')!;
+  g.font = LABEL_FONT();
   const w = Math.ceil(g.measureText(text).width) + 40;
   c.width = w;
   c.height = 64;
-  g.font = 'bold 40px system-ui, sans-serif';
+  g.font = LABEL_FONT();
   g.fillStyle = bg;
-  const r = 28;
+  const r = retro ? 2 : 28;
   g.beginPath();
   g.moveTo(r, 4);
   g.arcTo(w - 2, 4, w - 2, 60, r);
@@ -191,6 +226,10 @@ export function labelSprite(text: string, bg: string, fg = '#ffffff', scale = 0.
   g.fillText(text, w / 2, 34);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
+  if (retro) {
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.LinearFilter;
+  }
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, sizeAttenuation: false }));
   s.scale.set((scale * w) / 64, scale, 1);
   s.renderOrder = 30;

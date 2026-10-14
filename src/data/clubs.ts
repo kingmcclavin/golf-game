@@ -4,11 +4,11 @@ import { YD_TO_M } from '../core/units';
 export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
 export const RARITIES: Rarity[] = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
 export const RARITY_INFO: Record<Rarity, { label: string; color: string; glow: string; dupeCoins: number; upgradeCost: number }> = {
-  common: { label: 'Common', color: '#b8c2cc', glow: '#e9eef2', dupeCoins: 40, upgradeCost: 80 },
-  uncommon: { label: 'Uncommon', color: '#4cd17a', glow: '#a8ffc6', dupeCoins: 80, upgradeCost: 140 },
-  rare: { label: 'Rare', color: '#3d9bff', glow: '#a8d4ff', dupeCoins: 160, upgradeCost: 240 },
-  epic: { label: 'Epic', color: '#b05cff', glow: '#e3c2ff', dupeCoins: 320, upgradeCost: 400 },
-  legendary: { label: 'Legendary', color: '#ffb52e', glow: '#fff0b8', dupeCoins: 700, upgradeCost: 700 },
+  common: { label: 'Common', color: '#c0cbdc', glow: '#ffffff', dupeCoins: 40, upgradeCost: 80 },
+  uncommon: { label: 'Uncommon', color: '#63c74d', glow: '#b4e05a', dupeCoins: 80, upgradeCost: 140 },
+  rare: { label: 'Rare', color: '#2ce8f5', glow: '#a8e4f8', dupeCoins: 160, upgradeCost: 240 },
+  epic: { label: 'Epic', color: '#d06cd8', glow: '#f0b0f0', dupeCoins: 320, upgradeCost: 400 },
+  legendary: { label: 'Legendary', color: '#feae34', glow: '#fee761', dupeCoins: 700, upgradeCost: 700 },
 };
 
 export type ClubCategory = 'driver' | 'wood' | 'hybrid' | 'iron' | 'wedge' | 'putter';

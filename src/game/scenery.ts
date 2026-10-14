@@ -266,7 +266,7 @@ export function buildScenery(world: HoleWorld, quality: Quality, visualHeight: (
     }
   }
   // clouds
-  const cloudMat = new THREE.MeshLambertMaterial({ color: '#ffffff', emissive: '#c8d8e8', emissiveIntensity: 0.5, flatShading: true });
+  const cloudMat = new THREE.MeshBasicMaterial({ color: '#d8e4ec' });
   for (let i = 0; i < 9; i++) {
     const cl = new THREE.Group();
     for (let k = 0; k < 4; k++) {

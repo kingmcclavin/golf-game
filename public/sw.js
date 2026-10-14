@@ -1,5 +1,5 @@
 // Offline support: the game is fully client-side, so once loaded it can be played without a connection.
-const CACHE = 'fairway-legends-v2';
+const CACHE = 'fairway-legends-v3';
 const CORE = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './favicon.svg'];
 
 self.addEventListener('install', (e) => {
