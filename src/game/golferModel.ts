@@ -65,23 +65,6 @@ function patternTexture(style: string, c1: string, c2: string): THREE.Texture | 
 
 const mat = (color: string, extra: THREE.MeshStandardMaterialParameters = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.75, ...extra });
 
-function limb(a: THREE.Vector3, b: THREE.Vector3, r1: number, r2: number, m: THREE.Material): THREE.Mesh {
-  const len = a.distanceTo(b);
-  const g = new THREE.CylinderGeometry(r2, r1, len, 8);
-  const mesh = new THREE.Mesh(g, m);
-  mesh.position.copy(a).add(b).multiplyScalar(0.5);
-  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize());
-  mesh.castShadow = true;
-  return mesh;
-}
-
-function joint(p: THREE.Vector3, r: number, m: THREE.Material) {
-  const s = new THREE.Mesh(new THREE.SphereGeometry(r, 10, 8), m);
-  s.position.copy(p);
-  s.castShadow = true;
-  return s;
-}
-
 interface Pose {
   hipsYaw: number;
   shoulderYaw: number;
@@ -90,11 +73,15 @@ interface Pose {
   hands: THREE.Vector3;
   shaft: THREE.Vector3;
   legTurn: number;
+  hipShift?: number;
+  heel?: number;
 }
 
 const UP = new THREE.Vector3(0, 1, 0);
 const ARM_UPPER = 0.33;
 const ARM_FORE = 0.32;
+const LEG_UPPER = 0.47;
+const LEG_LOWER = 0.46;
 // elbow hints: both elbows point toward the ground, the lead one slightly toward the target
 const LEAD_POLE = new THREE.Vector3(-0.25, -1, -0.45).normalize();
 const TRAIL_POLE = new THREE.Vector3(-0.25, -1, 0.5).normalize();
@@ -112,11 +99,12 @@ export class GolferModel {
   private head = new THREE.Group();
   private armRig: Array<{ side: number; shoulderJoint: THREE.Mesh; upper: THREE.Mesh; elbowJoint: THREE.Mesh; fore: THREE.Mesh; hand: THREE.Mesh }> = [];
   private shoulderW = 0.2;
+  private hipW = 0.11;
+  private legRig: Array<{ side: number; foot: THREE.Group; thigh: THREE.Mesh; knee: THREE.Mesh; shin: THREE.Mesh }> = [];
   private wristAcc: THREE.Mesh | null = null;
   private clubPivot = new THREE.Group();
   private clubMesh = new THREE.Group();
   readonly bag = new THREE.Group();
-  private legs: THREE.Group[] = [];
   phase: SwingPhase = 'idle';
   private phaseT = 0;
   private back = 0;
@@ -151,10 +139,10 @@ export class GolferModel {
     this.spine = new THREE.Group();
     this.head = new THREE.Group();
     this.armRig = [];
+    this.legRig = [];
     this.wristAcc = null;
     this.clubPivot = new THREE.Group();
     this.clubMesh = new THREE.Group();
-    this.legs = [];
     this.build();
     if (keepClub) this.setClub(keepClub);
   }
@@ -181,29 +169,40 @@ export class GolferModel {
     // legs
     const shorts = pants?.style === 'shorts';
     const skirt = pants?.style === 'skirt';
-    for (const side of [-1, 1]) {
-      const leg = new THREE.Group();
-      leg.position.set(0, 0, side * 0.11 * widthMul);
-      const hip = new THREE.Vector3(0, 0, 0);
-      const knee = new THREE.Vector3(0.09, -0.47, side * 0.05);
-      const foot = new THREE.Vector3(0.02, -0.9, side * 0.1);
-      leg.add(limb(hip, knee, 0.085 * widthMul, 0.075 * widthMul, skirt ? skin : pantsMat));
-      leg.add(joint(knee, 0.072 * widthMul, shorts || skirt ? skin : pantsMat));
-      leg.add(limb(knee, foot, 0.07 * widthMul, 0.055, shorts || skirt ? skin : pantsMat));
-      if (shorts || skirt) {
-        const sock = limb(foot.clone().add(new THREE.Vector3(0.01, 0.16, 0)), foot, 0.058, 0.058, mat('#f4f4f4'));
-        leg.add(sock);
-      }
+    // legs: thigh + shin solved by IK between the hip and a planted foot (pivoting on the toe)
+    const legMat = skirt ? skin : pantsMat;
+    const shinMat = shorts || skirt ? skin : pantsMat;
+    const unitLeg = (r1: number, r2: number, m: THREE.Material) => {
+      const mesh = new THREE.Mesh(new THREE.CylinderGeometry(r2, r1, 1, 8).translate(0, 0.5, 0), m);
+      mesh.castShadow = true;
+      this.root.add(mesh);
+      return mesh;
+    };
+    this.legRig = [-1, 1].map((side) => {
+      const foot = new THREE.Group();
+      foot.rotation.order = 'YZX';
+      // group origin is the toe on the ground; the heel lifts by pitching about it
+      foot.position.set(0.23, 0, side * (0.11 * widthMul + 0.1));
       const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.09, 0.12), shoeMat);
-      shoe.position.set(foot.x + 0.07, foot.y - 0.02, foot.z);
+      shoe.position.set(-0.14, 0.045, 0);
       shoe.castShadow = true;
       const sole = new THREE.Mesh(new THREE.BoxGeometry(0.29, 0.03, 0.125), soleMat);
-      sole.position.set(foot.x + 0.07, foot.y - 0.075, foot.z);
-      leg.add(shoe, sole);
-      leg.position.y = 0.95;
-      this.root.add(leg);
-      this.legs.push(leg);
-    }
+      sole.position.set(-0.14, 0.0, 0);
+      foot.add(shoe, sole);
+      if (shorts || skirt) {
+        const sock = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.058, 0.16, 8), mat('#f4f4f4'));
+        sock.position.set(-0.2, 0.13, 0);
+        foot.add(sock);
+      }
+      this.root.add(foot);
+      const thigh = unitLeg(0.085 * widthMul, 0.075 * widthMul, legMat);
+      const knee = new THREE.Mesh(new THREE.SphereGeometry(0.072 * widthMul, 10, 8), shinMat);
+      knee.castShadow = true;
+      this.root.add(knee);
+      const shin = unitLeg(0.07 * widthMul, 0.055, shinMat);
+      return { side, foot, thigh, knee, shin };
+    });
+    this.hipW = 0.11 * widthMul;
     if (skirt) {
       const sk = new THREE.Mesh(new THREE.CylinderGeometry(0.17 * widthMul, 0.26 * widthMul, 0.32, 12), pantsMat);
       sk.position.y = -0.12;
@@ -659,7 +658,7 @@ export class GolferModel {
 
   private impactPose(): Pose {
     const hands = new THREE.Vector3(0.41, 0.84, -0.06);
-    return { hipsYaw: 0.5, shoulderYaw: 0.22, bend: this.bend + 0.03, headYaw: -0.22, hands, shaft: this.ballPos().sub(hands).normalize(), legTurn: 0.4 };
+    return { hipsYaw: 0.5, shoulderYaw: 0.22, bend: this.bend + 0.03, headYaw: -0.22, hands, shaft: this.ballPos().sub(hands).normalize(), legTurn: 0.4, hipShift: -0.04, heel: 0.1 };
   }
 
   /** Backswing keyed to a real swing: takeaway, lead arm parallel (wrists set), top. */
@@ -671,8 +670,8 @@ export class GolferModel {
       [0, this.addressPose()],
       [0.3, P(-0.16, -0.55, [0.37, 0.9, 0.3], [0.12, -0.18, 1])],
       [0.62, P(-0.45, -1.18, [0.24, 1.2, 0.44], [0.12, 1, 0.22], -0.12)],
-      [1.0, P(-0.78, -1.62, [0.1, 1.76, 0.32], [-0.25, -0.06, -1], -0.22)],
-      [1.12, P(-0.85, -1.8, [0.04, 1.8, 0.28], [-0.32, -0.38, -0.88], -0.26)],
+      [1.0, P(-0.78, -1.62, [0.12, 1.88, 0.26], [-0.22, 0.14, -1], -0.22)],
+      [1.12, P(-0.85, -1.8, [0.08, 1.9, 0.22], [-0.3, -0.25, -0.92], -0.26)],
     ];
   }
 
@@ -683,9 +682,9 @@ export class GolferModel {
     });
     return [
       [0, this.impactPose()],
-      [0.3, P(0.95, 0.95, -0.36, -0.55, [0.35, 0.98, -0.38], [0.12, 0.02, -1], 0.75)],
-      [0.62, P(1.3, 1.5, -0.24, -0.5, [0.14, 1.4, -0.42], [0.0, 1, -0.25], 1.0)],
-      [1.0, P(1.5, 1.9, -0.08, 0, [-0.2, 1.74, -0.1], [-0.5, -0.5, 0.7], 1.2)],
+      [0.3, { ...P(0.95, 0.95, -0.36, -0.55, [0.35, 0.98, -0.38], [0.12, 0.02, -1], 0.75), hipShift: -0.08, heel: 0.35 }],
+      [0.62, { ...P(1.3, 1.5, -0.24, -0.5, [0.12, 1.42, -0.48], [0.0, 1, -0.25], 1.0), hipShift: -0.13, heel: 0.75 }],
+      [1.0, { ...P(1.55, 1.95, -0.06, 0, [-0.22, 1.74, -0.2], [-0.5, -0.5, 0.7], 1.2), hipShift: -0.16, heel: 1 }],
     ];
   }
 
@@ -708,6 +707,8 @@ export class GolferModel {
       // slerp-like: normalised Catmull-Rom of the direction keeps the club sweeping smoothly
       shaft: v((p) => p.shaft).normalize(),
       legTurn: cr(k0.legTurn, k1.legTurn, k2.legTurn, k3.legTurn),
+      hipShift: cr(k0.hipShift ?? 0, k1.hipShift ?? 0, k2.hipShift ?? 0, k3.hipShift ?? 0),
+      heel: Math.max(0, cr(k0.heel ?? 0, k1.heel ?? 0, k2.heel ?? 0, k3.heel ?? 0)),
     };
   }
 
@@ -716,6 +717,7 @@ export class GolferModel {
     return {
       hipsYaw: l(a.hipsYaw, b.hipsYaw), shoulderYaw: l(a.shoulderYaw, b.shoulderYaw), bend: l(a.bend, b.bend), headYaw: l(a.headYaw, b.headYaw),
       hands: a.hands.clone().lerp(b.hands, k), shaft: a.shaft.clone().lerp(b.shaft, k).normalize(), legTurn: l(a.legTurn, b.legTurn),
+      hipShift: l(a.hipShift ?? 0, b.hipShift ?? 0), heel: l(a.heel ?? 0, b.heel ?? 0),
     };
   }
 
@@ -743,9 +745,12 @@ export class GolferModel {
     mesh.scale.set(1, len, 1);
   }
 
-  /** Two-bone IK: returns elbow and reached hand position. */
   private solveArm(S: THREE.Vector3, T: THREE.Vector3, pole: THREE.Vector3) {
-    const L1 = ARM_UPPER, L2 = ARM_FORE;
+    return this.solveLimb(S, T, ARM_UPPER, ARM_FORE, pole);
+  }
+
+  /** Two-bone IK: returns the middle joint ("elbow") and the reached end position ("hand"). */
+  private solveLimb(S: THREE.Vector3, T: THREE.Vector3, L1: number, L2: number, pole: THREE.Vector3) {
     const d = T.clone().sub(S);
     let dist = d.length();
     const dir = d.divideScalar(dist || 1);
@@ -766,10 +771,26 @@ export class GolferModel {
     this.spine.rotation.z = p.bend;
     this.spine.rotation.y = p.shoulderYaw - p.hipsYaw;
     this.head.rotation.y = p.headYaw;
-    // feet stay planted; knees and hips turn
-    if (this.legs[0]) this.legs[0].rotation.y = p.legTurn * 0.5 + p.hipsYaw * 0.15;
-    if (this.legs[1]) this.legs[1].rotation.y = p.legTurn * 0.9;
+    // weight shift: the pelvis slides toward the target and drops a touch as the knees flex
+    const shift = p.hipShift ?? 0;
+    this.hips.position.set(0, 0.95 - Math.abs(shift) * 0.25, shift);
     this.root.updateMatrixWorld(true);
+    // legs: feet stay planted, the trail heel peels up onto the toe in the follow-through
+    for (const leg of this.legRig) {
+      const trail = leg.side === 1;
+      const heel = trail ? p.heel ?? 0 : 0;
+      leg.foot.rotation.y = trail ? Math.max(0, p.legTurn) * 0.55 : Math.max(0, p.legTurn) * 0.15;
+      leg.foot.rotation.z = -heel * 0.95;
+      leg.foot.updateMatrixWorld(true);
+      const ankle = this.root.worldToLocal(leg.foot.localToWorld(new THREE.Vector3(-0.2, 0.07, 0)));
+      const hip = this.root.worldToLocal(this.hips.localToWorld(new THREE.Vector3(0, 0, leg.side * this.hipW)));
+      // knees point over the toes; the lead knee kicks toward the ball at the top, the trail knee toward the target at the finish
+      const pole = new THREE.Vector3(1, 0, trail ? -Math.max(0, p.legTurn) * 0.9 : -p.legTurn * 0.6).normalize();
+      const sol = this.solveLimb(hip, ankle, LEG_UPPER, LEG_LOWER, pole);
+      this.placeLimb(leg.thigh, hip, sol.elbow);
+      leg.knee.position.copy(sol.elbow);
+      this.placeLimb(leg.shin, sol.elbow, sol.hand);
+    }
 
     const lead = this.armRig[0], trail = this.armRig[1];
     const Sl = this.shoulderPos(-1), St = this.shoulderPos(1);
