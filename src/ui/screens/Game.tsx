@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { MatchController } from '../../game/matchController';
-import { host } from '../../game/renderer';
+import { host } from '../../game2d/host';
+import { MatchController } from '../../game2d/match';
 import { useStore } from '../../state/store';
-import { Canvas3D } from '../components/common';
+import { GameCanvas } from '../components/common';
 import { HUD } from '../hud/HUD';
 import { launchMatch, pendingMatch, pickOpponents } from './PlaySetup';
 
@@ -30,8 +30,8 @@ export function GameScreen() {
   if (host.failed) {
     return (
       <div className="screen dim" style={{ alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
-        <h2>3D graphics unavailable</h2>
-        <p className="muted" style={{ maxWidth: 480 }}>Your browser or device could not start WebGL, which the golf course needs. Try enabling hardware acceleration, updating your browser, or playing on another device. Your menus, bag and shop still work.</p>
+        <h2>Graphics unavailable</h2>
+        <p className="muted" style={{ maxWidth: 480 }}>Your browser could not start a drawing canvas, which the golf course needs. Try updating your browser or playing on another device. Your menus, bag and shop still work.</p>
         <button className="btn primary" onClick={() => go('menu')}>Back to menu</button>
       </div>
     );
@@ -58,11 +58,9 @@ export function GameScreen() {
     if (!d || !ctl) return;
     if (!d.moved) {
       if (ctl.phase === 'aim') {
-        // tap on the course in overhead views aims there
-        const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-        const hit = ctl.pickGround(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
-        const cam = useHudCam();
-        if (hit && (cam === 'target' || cam === 'overview')) ctl.aimAt(hit.x, hit.z);
+        // tap on the course to aim there
+        const hit = ctl.pickGround(e.clientX, e.clientY);
+        if (hit) ctl.aimAt(hit.x, hit.z);
       } else ctl.skip();
     }
   };
@@ -80,13 +78,8 @@ export function GameScreen() {
 
   return (
     <>
-      <Canvas3D onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} />
+      <GameCanvas onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} />
       {ctl && <HUD ctl={ctl} onQuit={quit} onAgain={again} />}
     </>
   );
-}
-
-import { useHud } from '../../state/matchStore';
-function useHudCam() {
-  return useHud.getState().camMode;
 }

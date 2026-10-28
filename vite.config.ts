@@ -8,7 +8,7 @@ export default defineConfig({
     target: 'es2020',
     chunkSizeWarningLimit: 1200,
     rollupOptions: {
-      output: { manualChunks: { three: ['three'], react: ['react', 'react-dom'] } },
+      output: { manualChunks: { react: ['react', 'react-dom'] } },
     },
   },
   test: { environment: 'node', include: ['src/**/*.test.ts'] },

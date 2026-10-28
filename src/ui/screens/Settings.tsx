@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { sound } from '../../audio/sound';
-import { host } from '../../game/renderer';
+import { host } from '../../game2d/host';
 import { loadProfileFromJSON, newProfile } from '../../state/profile';
 import { exportSave, resetSave } from '../../state/storage';
 import { useStore } from '../../state/store';
@@ -40,10 +40,10 @@ export function SettingsScreen() {
         <div className="setting"><span>Volume</span>
           <input type="range" min={0} max={1} step={0.05} value={st.volume} onChange={(e) => upd({ volume: Number(e.target.value) })} onPointerUp={() => sound.play('coin')} style={{ width: 180 }} />
         </div>
-        <div className="setting"><span>8-bit pixel look<div className="muted" style={{ fontSize: 12 }}>Retro palette and pixel size for the 3D world. Bigger pixels also run faster.</div></span>
-          <Seg value={st.retro} options={[['chunky', 'Chunky'], ['classic', 'Classic'], ['fine', 'Fine'], ['off', 'Off']]} onChange={(v) => upd({ retro: v })} />
+        <div className="setting"><span>Pixel size<div className="muted" style={{ fontSize: 12 }}>How chunky the pixel-art course looks. Bigger pixels also run faster.</div></span>
+          <Seg value={st.retro} options={[['chunky', 'Chunky'], ['classic', 'Classic'], ['fine', 'Fine']]} onChange={(v) => upd({ retro: v })} />
         </div>
-        <div className="setting"><span>Graphics quality<div className="muted" style={{ fontSize: 12 }}>Low disables shadows and grass for older phones. Current: {Math.round(host.fps)} fps</div></span>
+        <div className="setting"><span>Graphics quality<div className="muted" style={{ fontSize: 12 }}>Low turns off water shimmer and thins particles for older phones. Current: {Math.round(host.fps)} fps</div></span>
           <Seg value={st.quality} options={[['low', 'Low'], ['medium', 'Medium'], ['high', 'High']]} onChange={(v) => upd({ quality: v })} />
         </div>
         <div className="setting"><span>Opponent shot speed</span>

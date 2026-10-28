@@ -1,7 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
-import { host } from './game/renderer';
+import { host } from './game2d/host';
 
 // handle for automated tests / debugging
 (window as any).__flHost = host;
@@ -9,7 +9,7 @@ import '@fontsource/press-start-2p/latin-400.css';
 import '@fontsource/jersey-10/latin-400.css';
 import './styles.css';
 
-// make sure the pixel font is ready before 3D labels are painted into canvases
+// make sure the pixel font is ready before labels are painted into the game canvas
 void document.fonts?.load('8px "Press Start 2P"');
 
 // block pinch-zoom / double-tap zoom on iOS Safari during play

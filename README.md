@@ -1,8 +1,8 @@
 # Fairway Legends ⛳
 
-A complete, original 3D arcade golf game for the browser, in an 8-bit pixel-art style. Pull back and release to swing, compete against AI rivals with their own personalities, earn coins, open club packs, collect 59 clubs with unique abilities, unlock four courses and dress up your golfer.
+A complete, original top-down 2D arcade golf game for the browser, in an 8-bit pixel-art style. Pull back and release to swing, compete against AI rivals with their own personalities, earn coins, open club packs, collect 59 clubs with unique abilities, unlock four courses and dress up your golfer.
 
-Built with **TypeScript + React + Vite + Three.js**. It needs no backend, no account and no paid services. Everything runs client-side, and progress is saved in the browser.
+Built with **TypeScript + React + Vite** and a plain 2D canvas (no game engine or WebGL). It needs no backend, no account and no paid services. Everything runs client-side, and progress is saved in the browser.
 
 ---
 
@@ -47,7 +47,7 @@ The build output is a static site (`dist/`) with relative asset paths, so it can
 
 ### Golf simulation (`src/golf/`)
 * Purpose-built fixed-timestep (240 Hz) ball physics: gravity, quadratic aerodynamic drag, Magnus lift and side spin (draw/fade/hook/slice), spin decay, wind (stronger with height), Coulomb-friction bounces with backspin "check", rolling resistance per surface, slopes, cup capture with lip-outs, trees (trunk and canopy), rocks, water hazards (lateral drop), out of bounds (stroke and distance), bunkers and waste areas.
-* The same deterministic simulation drives the player's shots, the AI's planning and the shot preview. Shots are simulated first and then **played back frame by frame** in 3D, so the ball always travels visibly; nothing teleports.
+* The same deterministic simulation drives the player's shots, the AI's planning and the shot preview. Shots are simulated first and then **played back frame by frame** on the map (the ball's height is shown by lifting it above its shadow and drawing it slightly bigger), so the ball always travels visibly; nothing teleports. The physics stays fully 3D under the hood: slopes, elevation, spin and bounces are real even though the view is flat.
 * Club carry is calibrated by solving for launch speed against the flight model, so club power stats translate predictably into yards.
 * The preview shows the arc, landing zone and carry/total estimates. The landing-zone ellipse and how much of the wind the preview accounts for depend on club accuracy and abilities.
 * Surfaces: tee, fairway, rough, deep rough, fringe, green, bunker, waste sand, water, OOB. Each has its own bounce, friction, roll and spin grip. Lies change distance, accuracy, spin and timing difficulty (uneven lies too).
@@ -91,15 +91,15 @@ In automated rounds an expert typically shoots a few under par over nine holes a
 Player XP and levels unlock courses, opponent difficulties, shot shaping, trajectory control and 18-hole rounds. There are 23 achievements to claim, 3 daily challenges (rotating by date), a match history, career stats and best rounds.
 
 ### Character and cosmetics (`src/data/cosmetics.ts`, `src/game/golferModel.ts`)
-* Modular low-poly 3D golfer built from parts: body style, skin tone, face, 11 hairstyles and hair colours are free.
+* Modular pixel-art golfer drawn from a jointed swing rig, so every outfit works in every swing frame: body style, skin tone, face, 11 hairstyles and hair colours are free.
 * 60+ purchasable items across hats, shirts (polo, tee, stripes, argyle, floral, flame, vest), trousers/shorts/skorts/plaid, shoes, gloves, glasses, accessories (watch, chain, towel, scarf, cape…) and golf bags. Items carry rarity and collection labels.
-* Rotatable 3D preview with try-on before buying. Cosmetics are purely visual and are shown on your golfer during play. Bots wear outfits from the same system.
+* Rotatable pixel preview with try-on before buying. Cosmetics are purely visual and are shown on your golfer during play. Bots wear outfits from the same system.
 
 ### 8-bit presentation
-* **Pixel pipeline:** the 3D world renders into a low-resolution target (about 210 game pixels on the short side by default) and is scaled up with crisp, square pixels. A post-process pass tone maps each pixel, applies 4×4 ordered (Bayer) dithering and snaps it to a fixed 50-colour retro palette (Endesga-32 plus extra greens, sky blues and sands). The sky is drawn in flat colour bands and shadows are hard-edged. *Settings → 8-bit pixel look* switches between Chunky, Classic and Fine pixels, or Off for the smooth renderer. Bigger pixels also make it cheaper to run on phones.
+* **Top-down pixel art:** each hole is painted once into map images (2 px/m for the whole hole, 8 px/m around the green) with dithered relief shading, mowing stripes, bunker rims, water foam, tree and rock sprites; per frame only the map is blitted and the moving things are drawn on top. Everything renders into one low-resolution canvas scaled up with crisp, square pixels. *Settings → Pixel size* switches between Chunky, Classic and Fine. Bigger pixels also make it cheaper to run on phones.
 * **Pixel UI:** Press Start 2P for titles and Jersey 10 for text, both bundled with the app (SIL Open Font License) so they work offline. Panels and buttons are square, bevelled boxes that press in, with hard drop shadows in the same palette. There are pixel-art icons (coins, menu tiles, packs, swing ball, camera), a blocky timing arc and segmented power and stat bars. In-world labels are drawn at native pixel size so they stay sharp.
 * **Chiptune audio:** a looping NES-style track (two pulse voices, triangle bass, noise drums) and 8-bit sound effects. Everything is synthesised live with Web Audio; there are no audio files.
-* Three.js scene: instanced low-poly trees/rocks/grass, animated water shader, waving flag, distant mountains, mesas and a lighthouse. Cameras include a hole fly-over intro plus behind-the-ball, target, green, overview, ball-follow and landing views.
+* The map always points up the hole. The camera frames the ball and the predicted landing zone above the thumb controls, follows the ball in flight, and zooms in for putts. Camera modes: aim, target, green and whole-hole overview, plus a pin-to-tee fly-over intro. Putts show animated slope arrows on the green; tap anywhere on the course to aim there.
 * HUD: hole card, live leaderboard, wind compass, mini-map (tap to aim), club selector, lie/elevation/carry chips, ability status, timing arc and power bar, shot messages, hole summaries with commentary, scorecard and a final results screen with a reward breakdown.
 
 ### Saving (`src/state/`)
@@ -107,12 +107,12 @@ Player XP and levels unlock courses, opponent difficulties, shot shaping, trajec
 * **Browser-local saves are lost if you clear site data, use private browsing or switch browser/device.** Use *Settings → Export save* to download a backup and *Import save* to restore it on any device.
 
 ### iPhone first (also iPad and desktop)
-* **Portrait play** is the primary phone layout: scoreboard and wind at the top; info chips, aim buttons and the big swing ball in the thumb zone; the club picker along the bottom. The 3D view gets a wider field of view and a raised framing so the golfer and ball sit above your thumbs. Landscape works too.
+* **Portrait play** is the primary phone layout: scoreboard and wind at the top; info chips, aim buttons and the big swing ball in the thumb zone; the club picker along the bottom. The camera keeps the golfer, ball and target inside the part of the screen the controls don't cover. Landscape works too.
 * **Pull distance is sized to the screen.** Full power is reached just above the screen edge (overpower right at the edge), so a thumb can always reach 100% in both orientations. The home indicator area is excluded.
 * **Home-screen app:** in Safari tap Share → *Add to Home Screen* (the menu shows a one-time tip). It launches full screen with its own icon. A service worker caches the game so it **plays offline** after the first visit.
 * **Haptics:** a tap when you start the pull and a stronger one on a perfect release, holed birdies and epic pack pulls. This uses the iOS 18 switch-input haptic on iPhone and the Vibration API elsewhere, and can be turned off in Settings.
 * **Audio** unlocks on the first touch, as iOS Safari requires. Sounds follow the ring/silent switch.
-* **Performance:** the pixel ratio is capped per quality preset, and adaptive resolution drops rendering resolution step by step if the frame rate falls below ~42 fps (raising it again when there's headroom). Menus throttle the background 3D scene. Low quality disables shadows and grass.
+* **Performance:** the hole map is painted once per hole (a few hundred ms); each frame is a handful of blits and sprites. Menus throttle the background scene. Low quality turns off water shimmer and thins particles.
 * Touch details: pointer capture on the swing pad, `touch-action: none` on the course, no pinch, double-tap or long-press callouts, safe-area insets for the notch and Dynamic Island, and scrollable sheets on every screen.
 
 ## Project structure
@@ -123,13 +123,13 @@ src/
   golf/        physics, hole generation & terrain, shot model, match rules, AI, scoring
   data/        clubs, abilities, courses & themes, bots, cosmetics, packs, economy, progression, achievements, challenges, events
   state/       profile model (pure functions), persistence/migrations, zustand stores (profile + in-match HUD)
-  game/        Three.js: shared renderer, hole scene, terrain mesh, scenery, golfer model, visuals, match controller, menu/preview views
+  game2d/      2D canvas: pixel host, course map painter, sprite drawing, swing rig, match controller, menu/preview views
   audio/       Web Audio synthesiser
   ui/          React screens, HUD and components
 scripts/e2e.mjs   browser end-to-end test
 ```
 
-The simulation (`golf/`, `data/`, `state/profile.ts`) has no DOM or Three.js dependency, so it runs in Node tests. The match controller drives the 3D scene and pushes low-frequency state to a small HUD store. High-frequency values (power, needle) live in a separate store to keep React re-renders cheap.
+The simulation (`golf/`, `data/`, `state/profile.ts`) has no DOM dependency, so it runs in Node tests. The match controller draws the 2D course and pushes low-frequency state to a small HUD store. High-frequency values (power, needle) live in a separate store to keep React re-renders cheap.
 
 ## Extending the game
 

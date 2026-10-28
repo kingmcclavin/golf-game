@@ -26,7 +26,8 @@ export interface Settings {
   showSlopeGrid: boolean;
   haptics: boolean;
   fastPacks: boolean;
-  retro: 'off' | 'fine' | 'classic' | 'chunky';
+  /** pixel size of the game world */
+  retro: 'fine' | 'classic' | 'chunky';
 }
 
 export interface MatchRecord {
@@ -190,6 +191,7 @@ export function sanitize(raw: any): Profile {
   p.matchHistory = Array.isArray(raw?.matchHistory) ? raw.matchHistory.slice(0, 50) : [];
   p.packHistory = Array.isArray(raw?.packHistory) ? raw.packHistory.slice(0, 50) : [];
   p.settings = { ...defaultSettings(), ...(raw?.settings ?? {}) };
+  if (!['fine', 'classic', 'chunky'].includes(p.settings.retro)) p.settings.retro = (p.settings.retro as string) === 'off' ? 'fine' : 'classic';
   p.seenCourses = Array.isArray(raw?.seenCourses) ? raw.seenCourses : ['pinecrest'];
   p.lastLevel = Number.isFinite(raw?.lastLevel) ? raw.lastLevel : levelFromXp(p.xp).level;
   refreshCollectionStats(p);

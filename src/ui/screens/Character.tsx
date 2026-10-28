@@ -2,10 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { sound } from '../../audio/sound';
 import { RARITY_INFO } from '../../data/clubs';
 import { BODY_STYLES, COSMETIC_SLOTS, COSMETICS, FACES, HAIR_COLORS, HAIR_STYLES, OPTIONAL_SLOTS, SKIN_TONES, SLOT_NAMES, type CosmeticItem, type CosmeticSlot, type Outfit } from '../../data/cosmetics';
-import { PreviewView } from '../../game/menuView';
-import { host } from '../../game/renderer';
+import { host } from '../../game2d/host';
+import { PreviewView } from '../../game2d/previewView';
 import { useStore } from '../../state/store';
-import { Canvas3D, Coins, Modal, RarityTag, TopBar } from '../components/common';
+import { GameCanvas, Coins, Modal, RarityTag, TopBar } from '../components/common';
 
 type Tab = 'look' | CosmeticSlot;
 const ICON: Record<CosmeticSlot, string> = { hat: '🧢', shirt: '👕', pants: '👖', shoes: '👟', gloves: '🧤', glasses: '🕶️', accessory: '⌚', bag: '🎒' };
@@ -75,13 +75,13 @@ export function CharacterScreen({ shop }: { shop: boolean }) {
     <div className="screen" style={{ background: 'linear-gradient(180deg, #0d2f2c, #071a19)' }}>
       <TopBar title={shop ? 'Cosmetics Shop' : 'Character'} />
       <div className="char-layout">
-        <Canvas3D
+        <GameCanvas
           className="char-stage panel"
           onPointerDown={(e) => { drag.current = e.clientX; (e.target as HTMLElement).setPointerCapture?.(e.pointerId); }}
           onPointerMove={(e) => { if (drag.current !== null) { viewRef.current?.rotate(e.clientX - drag.current); drag.current = e.clientX; } }}
           onPointerUp={() => { drag.current = null; }}
         >
-          {host.failed && <div className="center muted" style={{ padding: 40 }}>3D preview unavailable on this device.</div>}
+          {host.failed && <div className="center muted" style={{ padding: 40 }}>Preview unavailable on this device.</div>}
           <div style={{ position: 'absolute', left: 10, bottom: 10, pointerEvents: 'none' }} className="muted">↔ Drag to rotate</div>
           {tryOn && (
             <div className="panel" style={{ position: 'absolute', left: 10, top: 10, right: 10, padding: 10 }} onPointerDown={(e) => e.stopPropagation()}>
@@ -95,7 +95,7 @@ export function CharacterScreen({ shop }: { shop: boolean }) {
               </div>
             </div>
           )}
-        </Canvas3D>
+        </GameCanvas>
         <div className="panel char-panel">
           <div className="tabs">
             {!shop && <button className={`tab ${tab === 'look' ? 'on' : ''}`} onClick={() => setTab('look')}>🙂 Look</button>}

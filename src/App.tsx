@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { sound } from './audio/sound';
-import { host } from './game/renderer';
+import { host } from './game2d/host';
 import { useStore } from './state/store';
 import { Toasts } from './ui/components/common';
 import { MenuBackdrop } from './ui/components/MenuBackdrop';
@@ -25,8 +25,7 @@ export default function App() {
     sound.hapticsOn = settings.haptics;
     sound.setVolume(settings.volume);
     sound.setMusic(settings.music);
-    if (host.quality !== settings.quality) host.applyQuality(settings.quality);
-    if (host.retro !== settings.retro) host.applyRetro(settings.retro);
+    if (host.pixelSize !== settings.retro) host.setPixelSize(settings.retro);
     document.documentElement.dataset.retro = settings.retro;
   }, [settings]);
 

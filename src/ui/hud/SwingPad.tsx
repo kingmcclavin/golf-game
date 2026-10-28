@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import type { MatchController } from '../../game/matchController';
+import type { MatchController } from '../../game2d/match';
 import { sound } from '../../audio/sound';
 import { PixelIcon, pixelBallGrid } from '../components/PixelIcon';
 

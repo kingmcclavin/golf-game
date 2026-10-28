@@ -3,7 +3,7 @@ import { sound } from '../../audio/sound';
 import { CATEGORY_LABEL, clubPerformance, effectiveStats, RARITY_INFO, STAT_KEYS, STAT_LABEL, SUBTYPES, type ClubDef, type Rarity } from '../../data/clubs';
 import { describeAbility, EFFECTS } from '../../data/abilities';
 import { levelFromXp } from '../../data/progression';
-import { host } from '../../game/renderer';
+import { host } from '../../game2d/host';
 import { useStore } from '../../state/store';
 import { yd } from '../../core/units';
 
@@ -20,7 +20,7 @@ export function RarityTag({ r }: { r: Rarity }) {
   return <span className={`tag bg-${r}`}>{RARITY_INFO[r].label}</span>;
 }
 
-export function Canvas3D({ className, onPointerDown, onPointerMove, onPointerUp, children }: {
+export function GameCanvas({ className, onPointerDown, onPointerMove, onPointerUp, children }: {
   className?: string;
   onPointerDown?: (e: React.PointerEvent) => void;
   onPointerMove?: (e: React.PointerEvent) => void;

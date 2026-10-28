@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { sound } from '../../audio/sound';
 import { RARITY_INFO } from '../../data/clubs';
-import type { MatchController } from '../../game/matchController';
+import type { MatchController } from '../../game2d/match';
 import { fmtRel, scoreClass } from '../../golf/scoring';
 import { useHud, useSwing } from '../../state/matchStore';
 import { useStore } from '../../state/store';

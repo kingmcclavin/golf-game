@@ -1,4 +1,3 @@
-import * as THREE from 'three';
 import { sound } from '../audio/sound';
 import { clamp, DEG, wrapAngle, yawOf } from '../core/math';
 import { RNG } from '../core/rng';
@@ -10,17 +9,18 @@ import { courseById } from '../data/courses';
 import { FEATURE_UNLOCKS, levelFromXp } from '../data/progression';
 import { botSetup, decideBotShot } from '../golf/ai';
 import { Match, type MatchLength, type PlayerState, type ShotReport } from '../golf/match';
-import { BALL_R, FRAME_DT, type SimResult } from '../golf/physics';
+import { FRAME_DT, type SimResult } from '../golf/physics';
 import { makeBotPlayer, makePlayer } from '../golf/players';
 import { scoreName } from '../golf/scoring';
 import { executeShot, isPutter, previewShot, shotType, swingTuning, type ClubRef, type ShotPlan, type ShotPreview, type ShotSetup, type Trajectory } from '../golf/shot';
+import type { V3 } from '../core/math';
 import { useHud, useSwing, type CamMode, type HudState, type Message, type Phase } from '../state/matchStore';
 import { recordMatch, type Profile } from '../state/profile';
 import { useStore } from '../state/store';
-import { GolferModel } from './golferModel';
-import { HoleScene } from './holeScene';
-import { host, type Quality, type View } from './renderer';
-import { DotLine, labelSprite, Particles, Trail, updateLabel } from './visuals';
+import { CourseMap, HK, type Camera } from './course';
+import { Golfer } from './golfer';
+import { host, type View2D } from './host';
+import { drawBag, drawGolfer, INK, project, Px } from './sprites';
 
 export interface MatchSetup {
   courseId: string;
@@ -41,10 +41,22 @@ interface Flight {
   evIdx: number;
   done: boolean;
   doneT: number;
-  dir: THREE.Vector3;
-  landing: THREE.Vector3 | null;
-  long: boolean;
+  final: V3;
 }
+
+interface Particle {
+  x: number; z: number; y: number;
+  vx: number; vz: number; vy: number;
+  life: number; max: number; g: number; c: string;
+}
+type Burst = 'splash' | 'sand' | 'confetti' | 'sparkle' | 'dirt';
+const BURST_COLORS: Record<Burst, string[]> = {
+  splash: ['#ffffff', '#bfe6ff', '#7cc4ff'],
+  sand: ['#f0dca0', '#e2c88a', '#fff0c8'],
+  dirt: ['#6a8a3a', '#8aa04a', '#5a4a30'],
+  sparkle: ['#fff6a0', '#ffd23a', '#ffffff'],
+  confetti: ['#e43b44', '#feae34', '#2ce8f5', '#63c74d', '#b55088', '#ffffff'],
+};
 
 let msgId = 1;
 const ROLL_GUESS: Record<string, number> = { driver: 22, wood: 15, hybrid: 9, iron: 5, wedge: 2, putter: 0 };
@@ -57,57 +69,50 @@ const COMMENTS = {
   worse: ['One to forget.', 'That hole bit back.', 'Tough hole, move on.'],
 };
 
-export class MatchController implements View {
-  scene = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(55, 1, 0.05, 6000);
+/** Runs a round: turns, shots, bots, scoring, and draws it as a top-down pixel-art course. */
+export class MatchController implements View2D {
   match: Match;
-  hole: HoleScene | null = null;
-  private quality: Quality;
-  private golfers = new Map<number, GolferModel>();
-  private balls: THREE.Mesh[] = [];
-  private ballLabels: THREE.Sprite[] = [];
-  private pinLabel: THREE.Sprite;
-  private aimDots = new DotLine('#ffffff', 7, 90);
-  private trueLine = new DotLine('#7affc8', 6, 120);
-  private landRing: THREE.Mesh;
-  private trail = new Trail(500);
-  private particles = new Particles(500);
+  map: CourseMap | null = null;
+  private golfers = new Map<number, Golfer>();
   private rng: RNG;
   phase: Phase = 'loading';
-  private cur = 0;
+  cur = 0;
   private aimYaw = 0;
   private clubIdx = 0;
   private shape = 0;
   private traj: Trajectory = 'normal';
-  private power = 0;
+  power = 0;
   private needlePhase = 0;
-  private needle = 0;
-  private pulling = false;
-  private preview: ShotPreview | null = null;
+  needle = 0;
+  pulling = false;
+  preview: ShotPreview | null = null;
   private previewAt = 0;
   private previewPower = -1;
   private camMode: CamMode = 'behind';
-  private camPos = new THREE.Vector3(0, 10, 10);
-  private camLook = new THREE.Vector3();
-  private desPos = new THREE.Vector3();
-  private desLook = new THREE.Vector3();
+  private cam: Camera = { u: 0, w: 0, ppm: 2 };
+  private des: Camera = { u: 0, w: 0, ppm: 2 };
   private camLerp = 3;
   private flight: Flight | null = null;
+  /** where the active golfer stands (the ball they are hitting) */
+  private stance = { x: 0, z: 0 };
+  private flightBall: V3 | null = null;
+  private trail: Array<{ x: number; z: number; h: number }> = [];
+  private particles: Particle[] = [];
   private introT = 0;
   private resultTimer = 0;
-  private time = 0;
   private disposed = false;
   private level: number;
   private settings: Profile['settings'];
   private humanIdx = 0;
   private lastReport: ShotReport | null = null;
   private botTimer: number | null = null;
+  private W = 320;
+  private H = 480;
   readonly setup: MatchSetup;
 
   constructor(setup: MatchSetup) {
     this.setup = setup;
     this.settings = setup.profile.settings;
-    this.quality = this.settings.quality;
     this.level = levelFromXp(setup.profile.xp).level;
     const seed = (Date.now() & 0x7fffffff) ^ 0x2545f491;
     this.rng = new RNG(seed);
@@ -115,33 +120,7 @@ export class MatchController implements View {
     const players: PlayerState[] = [human, ...setup.opponents.map(makeBotPlayer)];
     this.match = new Match({ courseId: setup.courseId, length: setup.length, difficulty: setup.difficulty, seed, startHole: setup.length === 3 ? this.rng.int(0, 6) : 0 }, players);
     this.humanIdx = 0;
-    this.scene.add(this.aimDots.points, this.trueLine.points, this.trail.line, this.particles.points);
-    this.landRing = new THREE.Mesh(
-      new THREE.RingGeometry(0.86, 1, 40).rotateX(-Math.PI / 2),
-      new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.85, depthTest: false, depthWrite: false }),
-    );
-    this.landRing.renderOrder = 19;
-    const fill = new THREE.Mesh(new THREE.CircleGeometry(0.86, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.18, depthTest: false, depthWrite: false }));
-    fill.renderOrder = 18;
-    this.landRing.add(fill);
-    this.scene.add(this.landRing);
-    this.pinLabel = labelSprite('⛳', 'rgba(20,30,40,0.75)');
-    this.scene.add(this.pinLabel);
-    // balls
-    this.match.players.forEach((p, i) => {
-      const b = new THREE.Mesh(new THREE.SphereGeometry(BALL_R, 16, 12), new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.25, emissive: '#ffffff', emissiveIntensity: 0.15 }));
-      b.castShadow = true;
-      this.balls.push(b);
-      this.scene.add(b);
-      const lbl = labelSprite(i === 0 ? 'YOU' : p.name.split(' ')[0], p.isBot ? p.color : 'rgba(30,120,255,0.9)', '#ffffff', 0.038);
-      this.ballLabels.push(lbl);
-      this.scene.add(lbl);
-      const g = new GolferModel(p.outfit, p.bag[0].def);
-      g.root.visible = false;
-      g.bag.visible = false;
-      this.golfers.set(i, g);
-      this.scene.add(g.root, g.bag);
-    });
+    this.match.players.forEach((p, i) => this.golfers.set(i, new Golfer(p.bag[0].def)));
     useHud.setState({ ...useHud.getState(), phase: 'loading', outcome: null, finalRows: null, holeSummary: null, message: null });
     setTimeout(() => this.loadHole(), 30);
   }
@@ -152,16 +131,17 @@ export class MatchController implements View {
     this.setPhase('loading');
     setTimeout(() => {
       if (this.disposed) return;
-      this.hole?.dispose(this.scene);
       const t0 = performance.now();
-      this.hole = new HoleScene(this.match.world, this.scene, this.quality);
-      console.info(`hole built in ${(performance.now() - t0).toFixed(0)} ms`);
-      const pin = this.match.world.hole.pin;
-      this.pinLabel.position.set(pin.x, this.match.world.height(pin.x, pin.z) + 2.7, pin.z);
+      this.map = new CourseMap(this.match.world, this.settings.quality);
+      console.info(`hole painted in ${(performance.now() - t0).toFixed(0)} ms`);
       for (const [, g] of this.golfers) g.reset();
       this.introT = 0;
-      this.updateBalls();
+      this.trail = [];
+      this.particles = [];
       const w = this.match.world;
+      const pin = this.map.toMap(w.hole.pin.x, w.hole.pin.z);
+      this.cam = { u: pin.u, w: pin.w, ppm: 5 };
+      this.des = { ...this.cam };
       useHud.setState({
         holeNumber: this.match.holeNumber,
         totalHoles: this.match.totalHoles,
@@ -172,6 +152,7 @@ export class MatchController implements View {
         holeSummary: null,
         commentary: null,
         showHint: useStore.getState().profile.lifetime.rounds === 0 && this.match.holeIdx === 0,
+        wind: this.windHud(),
       });
       this.refreshPlayers();
       this.setPhase('intro');
@@ -192,7 +173,7 @@ export class MatchController implements View {
         color: p.isBot ? p.color : '#3d9bff',
         isBot: p.isBot,
         holeStrokes: p.strokes,
-        rel: m.totalRel(p) + (p.holed || p.pickedUp ? 0 : 0),
+        rel: m.totalRel(p),
         thru: p.scores.filter((s) => s !== null).length,
         holed: p.holed || p.pickedUp,
         scores: [...p.scores],
@@ -204,7 +185,7 @@ export class MatchController implements View {
   }
 
   // ------------------------------------------------------------------ turns
-  private startTurn() {
+  startTurn() {
     const pi = this.match.nextPlayer();
     if (pi === -1) {
       this.endHole();
@@ -212,16 +193,15 @@ export class MatchController implements View {
     }
     this.cur = pi;
     const p = this.match.players[pi];
-    for (const [i, g] of this.golfers) {
-      g.root.visible = i === pi;
-      g.bag.visible = i === pi;
-    }
     this.flight = null;
-    this.trail.reset();
+    this.flightBall = null;
+    this.trail = [];
     this.shape = 0;
     this.traj = 'normal';
     this.power = 0;
     this.pulling = false;
+    this.preview = null;
+    this.stance = { x: p.ball.x, z: p.ball.z };
     useSwing.setState({ pulling: false, power: 0, needle: 0 });
     const onGreen = p.lie === 'green' || p.lie === 'fringe';
     this.camMode = onGreen ? 'green' : 'behind';
@@ -230,11 +210,7 @@ export class MatchController implements View {
       this.aimYaw = this.pinYaw(pi);
       this.placeGolfer();
       this.setPhase('botThink');
-      useHud.setState({ isHumanTurn: false, botThinking: `${p.name} is lining up...`, message: null, bag: [] });
-      this.aimDots.clear();
-      this.trueLine.clear();
-      this.landRing.visible = false;
-      this.hole?.setSlopeArrows(false);
+      useHud.setState({ isHumanTurn: false, botThinking: `${p.name} is lining up...`, message: null, bag: [], camMode: this.camMode });
       const delay = this.settings.botSpeed === 'instant' ? 120 : this.settings.botSpeed === 'fast' ? 350 : 800;
       this.botTimer = window.setTimeout(() => this.botThink(), delay);
     } else {
@@ -244,12 +220,9 @@ export class MatchController implements View {
       this.setPhase('aim');
       const prevBot = this.lastReport ? this.match.players[this.lastReport.player].isBot : false;
       useHud.setState({ isHumanTurn: true, botThinking: null, message: prevBot ? { text: 'Your shot', kind: 'neutral', id: msgId++ } : null, bag: this.bagHud(), camModes: this.camModes() });
-      this.hole?.setSlopeArrows(onGreen && this.settings.showSlopeGrid);
       this.refreshAim(true);
     }
     this.refreshPlayers();
-    this.updateBalls();
-    this.snapCamera();
   }
 
   private botThink() {
@@ -272,15 +245,14 @@ export class MatchController implements View {
     return yawOf(pin.x - p.ball.x, pin.z - p.ball.z);
   }
 
-  private currentClub(): ClubRef {
+  currentClub(): ClubRef {
     const p = this.match.players[this.cur];
     return p.bag[clamp(this.clubIdx, 0, p.bag.length - 1)];
   }
 
   private autoClubIdx(pi: number): number {
     const p = this.match.players[pi];
-    const w = this.match.world;
-    const d = w.distToPin(p.ball.x, p.ball.z);
+    const d = this.match.world.distToPin(p.ball.x, p.ball.z);
     const pIdx = p.bag.findIndex(isPutter);
     if (p.lie === 'green' || (p.lie === 'fringe' && d < 15)) return pIdx;
     let best = -1;
@@ -302,7 +274,6 @@ export class MatchController implements View {
     const carry = clubPerformance(club.def, club.level).maxCarry;
     if (isPutter(club) || carry * 1.15 >= d) return this.pinYaw(pi);
     // aim down the fairway toward the centre line at our carry distance
-    const pr = w.hole.path;
     let along = 0;
     let bestD = Infinity;
     for (let s = 0; s < w.hole.pathLen; s += 5) {
@@ -311,7 +282,6 @@ export class MatchController implements View {
       const ahead = (f.x - p.ball.x) * (w.hole.pin.x - p.ball.x) + (f.z - p.ball.z) * (w.hole.pin.z - p.ball.z) > 0;
       if (ahead && dd < bestD) { bestD = dd; along = s; }
     }
-    void pr;
     const f = w.frame(along, 0);
     return yawOf(f.x - p.ball.x, f.z - p.ball.z);
   }
@@ -337,13 +307,9 @@ export class MatchController implements View {
   }
 
   private placeGolfer() {
-    const p = this.match.players[this.cur];
     const g = this.golfers.get(this.cur)!;
-    const club = this.currentClub();
-    g.setClub(club.def);
+    g.setClub(this.currentClub().def);
     g.reset();
-    const vh = this.hole ? this.hole.terrain.visualHeight : (x: number, z: number) => this.match.world.height(x, z);
-    g.placeAtBall(new THREE.Vector3(p.ball.x, p.ball.y, p.ball.z), this.aimYaw, vh);
   }
 
   // --------------------------------------------------------- player input API
@@ -367,23 +333,22 @@ export class MatchController implements View {
   nudgeAim(deg: number) {
     if (this.phase !== 'aim' || this.pulling) return;
     this.aimYaw = wrapAngle(this.aimYaw + deg * DEG);
-    this.placeGolfer();
     this.refreshAim(true);
   }
 
+  /** Horizontal drag on the course turns the aim (CSS pixels). */
   aimDrag(dxPixels: number) {
     if (this.phase !== 'aim' || this.pulling) return;
-    const k = isPutter(this.currentClub()) ? 0.0012 : this.camMode === 'target' || this.camMode === 'overview' ? 0.0016 : 0.003;
+    const k = isPutter(this.currentClub()) ? 0.0015 : 0.0035;
     this.aimYaw = wrapAngle(this.aimYaw + dxPixels * k);
-    this.placeGolfer();
     this.refreshAim(false);
   }
 
   aimAt(x: number, z: number) {
     if (this.phase !== 'aim' || this.pulling) return;
     const p = this.match.players[this.cur];
+    if (Math.hypot(x - p.ball.x, z - p.ball.z) < 0.5) return;
     this.aimYaw = yawOf(x - p.ball.x, z - p.ball.z);
-    this.placeGolfer();
     this.refreshAim(true);
   }
 
@@ -422,8 +387,7 @@ export class MatchController implements View {
     if (!this.pulling) return;
     this.power = clamp(dy, 0, 1.1);
     if (this.level >= FEATURE_UNLOCKS.shaping && !isPutter(this.currentClub())) this.shape = clamp(-dx * 1.6, -1, 1);
-    const g = this.golfers.get(this.cur);
-    g?.setBackswing(this.power);
+    this.golfers.get(this.cur)?.setBackswing(this.power);
     useSwing.setState({ power: this.power, pullX: dx, pullY: dy });
     useHud.setState({ shape: this.shape });
   }
@@ -448,10 +412,6 @@ export class MatchController implements View {
     const needle = this.needle;
     useSwing.setState({ pulling: false });
     this.setPhase('swing');
-    this.aimDots.clear();
-    this.trueLine.clear();
-    this.landRing.visible = false;
-    this.hole?.setSlopeArrows(false);
     this.golfers.get(pi)!.swing(() => this.fire(pi, setup, needle), this.power);
   }
 
@@ -466,10 +426,9 @@ export class MatchController implements View {
   }
 
   private refreshAim(force: boolean) {
-    if (this.phase !== 'aim' || !this.hole) return;
+    if (this.phase !== 'aim' || !this.map) return;
     const now = performance.now();
-    const club = this.currentClub();
-    const putt = isPutter(club);
+    const putt = isPutter(this.currentClub());
     const pw = this.pulling ? Math.max(0.05, this.power) : putt ? this.suggestPuttPower() : 1;
     if (!force && now - this.previewAt < 70 && Math.abs(pw - this.previewPower) < 0.02) {
       this.updateAimHud(this.preview, pw);
@@ -478,32 +437,23 @@ export class MatchController implements View {
     this.previewAt = now;
     this.previewPower = pw;
     const setup = this.makeSetup(pw);
-    const pv = previewShot(this.match.world, setup);
-    this.preview = pv;
+    this.preview = previewShot(this.match.world, setup);
     const tune = swingTuning(setup);
     useSwing.setState({ perfectWindow: tune.perfectWindow });
-    if (putt) {
-      this.aimDots.set(pv.arc);
-      this.landRing.visible = false;
-      if (pv.puttLine) this.trueLine.set(pv.puttLine);
-      else this.trueLine.clear();
-    } else {
-      this.aimDots.set(pv.arc);
-      this.trueLine.clear();
-      this.landRing.visible = true;
-      const lp = pv.landing;
-      this.landRing.position.set(lp.x, this.hole.terrain.visualHeight(lp.x, lp.z) + 0.25, lp.z);
-      this.landRing.scale.set(pv.spreadLat, 1, pv.spreadLong);
-      this.landRing.rotation.y = -this.aimYaw;
-    }
-    this.updateAimHud(pv, pw, tune.liePenalty);
+    this.updateAimHud(this.preview, pw, tune.liePenalty);
   }
 
-  private suggestPuttPower(): number {
+  suggestPuttPower(): number {
     const p = this.match.players[this.cur];
     const club = this.currentClub();
     const d = this.match.world.distToPin(p.ball.x, p.ball.z);
     return clamp((d * 1.08) / clubPerformance(club.def, club.level).maxCarry, 0.05, 1.1);
+  }
+
+  /** Wind arrow relative to the top of the screen (the map never rotates). */
+  private windHud() {
+    const wind = this.match.wind;
+    return { mph: Math.hypot(wind.x, wind.z) * MS_TO_MPH, angle: Math.atan2(wind.x, -wind.z) - (this.map?.upYaw ?? 0) };
   }
 
   private updateAimHud(pv: ShotPreview | null, pw: number, liePenalty?: number) {
@@ -513,7 +463,6 @@ export class MatchController implements View {
     const ctx = this.match.abilityContext(this.cur);
     ctx.power = pw;
     const st = abilityState(club.def.ability, ctx);
-    const wind = this.match.wind;
     const putt = isPutter(club);
     useHud.setState({
       clubIdx: this.clubIdx,
@@ -521,7 +470,7 @@ export class MatchController implements View {
       distToPin: w.distToPin(p.ball.x, p.ball.z),
       lie: p.lie,
       elevation: w.height(w.hole.pin.x, w.hole.pin.z) - p.ball.y,
-      wind: { mph: Math.hypot(wind.x, wind.z) * MS_TO_MPH, angle: Math.atan2(wind.x, -wind.z) - this.aimYaw },
+      wind: this.windHud(),
       preview: pv ? { carry: pv.carry, total: pv.total } : null,
       camMode: this.camMode,
       shape: this.shape,
@@ -543,13 +492,14 @@ export class MatchController implements View {
     const { plan, result } = executeShot(w, setup, needle, this.match.nextSeed());
     const p = this.match.players[pi];
     const putt = isPutter(setup.club);
+    const b = setup.ball;
     sound.play(putt ? 'putt' : 'hit', Math.min(1, setup.power));
     if (plan.perfect && !putt) {
-      this.particles.burst(setup.ball.x, setup.ball.y + 0.1, setup.ball.z, 'sparkle', 30);
+      this.burst(b.x, b.y + 0.1, b.z, 'sparkle', 24);
       sound.play('perfect');
     }
-    if (!putt && (p.lie === 'rough' || p.lie === 'deepRough' || p.lie === 'fringe' || p.lie === 'fairway')) this.particles.burst(setup.ball.x, setup.ball.y, setup.ball.z, 'dirt', 14);
-    if (p.lie === 'bunker' || p.lie === 'waste') { this.particles.burst(setup.ball.x, setup.ball.y, setup.ball.z, 'sand', 40); sound.play('sand'); }
+    if (!putt && (p.lie === 'rough' || p.lie === 'deepRough' || p.lie === 'fringe' || p.lie === 'fairway')) this.burst(b.x, b.y, b.z, 'dirt', 10);
+    if (p.lie === 'bunker' || p.lie === 'waste') { this.burst(b.x, b.y, b.z, 'sand', 30); sound.play('sand'); }
     const msgs: Message[] = [];
     if (plan.perfect) msgs.push({ text: 'PERFECT!', kind: 'perfect', id: msgId++ });
     if (plan.abilityActive) {
@@ -560,31 +510,28 @@ export class MatchController implements View {
       useHud.setState({ message: msgs[0] });
       if (msgs[1]) setTimeout(() => !this.disposed && useHud.setState({ message: msgs[1] }), 800);
     }
-    const dir = new THREE.Vector3(Math.sin(setup.aimYaw), 0, -Math.cos(setup.aimYaw));
-    const carryD = result.carry ? Math.hypot(result.carry.x - setup.ball.x, result.carry.z - setup.ball.z) : 0;
     const speed = p.isBot ? (this.settings.botSpeed === 'normal' ? 1.15 : this.settings.botSpeed === 'fast' ? 2.2 : 5) : 1.1;
-    this.flight = {
-      pi, setup, plan, result, t: 0, speed, evIdx: 0, done: false, doneT: 0, dir,
-      landing: result.carry ? new THREE.Vector3(result.carry.x, result.carry.y, result.carry.z) : null,
-      long: carryD > 70,
-    };
-    this.trail.reset();
+    const n = result.frameCount - 1;
+    const final = { x: result.frames[n * 3], y: result.frames[n * 3 + 1], z: result.frames[n * 3 + 2] };
+    this.flight = { pi, setup, plan, result, t: 0, speed, evIdx: 0, done: false, doneT: 0, final };
+    this.flightBall = { ...b };
+    this.trail = [];
     this.setPhase('flight');
     useHud.setState({ botThinking: null });
   }
 
-  private ballPosAt(f: Flight, t: number): THREE.Vector3 {
+  private ballPosAt(f: Flight, t: number): V3 {
     const fr = f.result.frames;
     const n = f.result.frameCount;
     const idx = Math.min(n - 1, t / FRAME_DT);
     const i = Math.floor(idx);
     const k = idx - i;
     const j = Math.min(n - 1, i + 1);
-    return new THREE.Vector3(
-      fr[i * 3] + (fr[j * 3] - fr[i * 3]) * k,
-      fr[i * 3 + 1] + (fr[j * 3 + 1] - fr[i * 3 + 1]) * k,
-      fr[i * 3 + 2] + (fr[j * 3 + 2] - fr[i * 3 + 2]) * k,
-    );
+    return {
+      x: fr[i * 3] + (fr[j * 3] - fr[i * 3]) * k,
+      y: fr[i * 3 + 1] + (fr[j * 3 + 1] - fr[i * 3 + 1]) * k,
+      z: fr[i * 3 + 2] + (fr[j * 3 + 2] - fr[i * 3 + 2]) * k,
+    };
   }
 
   private updateFlight(dt: number) {
@@ -593,16 +540,17 @@ export class MatchController implements View {
     if (!f.done) {
       f.t = Math.min(total, f.t + dt * f.speed);
       const pos = this.ballPosAt(f, f.t);
-      const ball = this.balls[f.pi];
-      ball.position.copy(pos);
-      if (!isPutter(f.setup.club)) this.trail.push(pos.x, pos.y, pos.z);
-      // events
+      this.flightBall = pos;
+      if (!isPutter(f.setup.club)) {
+        this.trail.push({ x: pos.x, z: pos.z, h: Math.max(0, pos.y - this.match.world.height(pos.x, pos.z)) });
+        if (this.trail.length > 160) this.trail.shift();
+      }
       const evs = f.result.events;
       while (f.evIdx < evs.length && evs[f.evIdx].t <= f.t + 0.001) {
         const e = evs[f.evIdx++];
-        if (e.type === 'water') { this.particles.burst(e.x, e.y, e.z, 'splash', 60); sound.play('splash'); }
-        else if (e.type === 'skip') { this.particles.burst(e.x, e.y, e.z, 'splash', 20); sound.play('bounce'); }
-        else if (e.type === 'sand') { this.particles.burst(e.x, e.y, e.z, 'sand', 30); sound.play('sand'); }
+        if (e.type === 'water') { this.burst(e.x, e.y, e.z, 'splash', 40); sound.play('splash'); }
+        else if (e.type === 'skip') { this.burst(e.x, e.y, e.z, 'splash', 14); sound.play('bounce'); }
+        else if (e.type === 'sand') { this.burst(e.x, e.y, e.z, 'sand', 24); sound.play('sand'); }
         else if (e.type === 'tree') sound.play('tree');
         else if (e.type === 'rock') sound.play('bounce', 1);
         else if (e.type === 'land' || e.type === 'bounce') sound.play('bounce', 0.6);
@@ -622,10 +570,10 @@ export class MatchController implements View {
   private finishShot() {
     const f = this.flight!;
     this.flight = null;
+    this.flightBall = null;
     const p = this.match.players[f.pi];
     const report = this.match.applyShot(f.pi, f.setup, f.plan, f.result);
     this.lastReport = report;
-    this.updateBalls();
     const g = this.golfers.get(f.pi)!;
     let text = report.text;
     let kind: Message['kind'] = report.kind;
@@ -636,9 +584,9 @@ export class MatchController implements View {
       text = p.strokes === 1 ? 'HOLE IN ONE!' : name === 'Par' ? 'Par' : name;
       kind = p.strokes - this.match.par < 0 ? 'great' : 'good';
       sub = `${p.isBot ? p.name : 'You'} holed out${dist > 1.5 ? ` from ${Math.round(dist * 3.28)} ft` : ''}`;
-      const b = this.balls[f.pi].position;
       if (p.strokes - this.match.par < 0) {
-        this.particles.burst(b.x, b.y + 0.3, b.z, 'confetti', 120);
+        const pin = this.match.world.hole.pin;
+        this.burst(pin.x, this.match.world.height(pin.x, pin.z) + 0.3, pin.z, 'confetti', 90);
         if (!p.isBot) sound.haptic(60);
         sound.play('cheer');
         g.react('celebrate');
@@ -658,19 +606,6 @@ export class MatchController implements View {
     this.refreshPlayers();
     this.resultTimer = 0;
     this.setPhase('result');
-  }
-
-  private updateBalls() {
-    const m = this.match;
-    m.players.forEach((p, i) => {
-      const b = this.balls[i];
-      const vis = !p.holed && !p.pickedUp;
-      b.visible = vis || (this.flight?.pi === i);
-      if (!this.flight || this.flight.pi !== i) b.position.set(p.ball.x, this.hole ? Math.max(p.ball.y, this.hole.terrain.visualHeight(p.ball.x, p.ball.z) + BALL_R) : p.ball.y, p.ball.z);
-      const l = this.ballLabels[i];
-      l.visible = vis && i !== this.cur && p.teedOff;
-      l.position.set(p.ball.x, b.position.y + 0.6, p.ball.z);
-    });
   }
 
   private endHole() {
@@ -707,8 +642,7 @@ export class MatchController implements View {
     const scores = me.scores.map((s) => s ?? 0);
     const bogeyFree = scores.every((s, i) => s - m.holePar(i) <= 0);
     const usedRare = me.stats.usedRarity.some((r) => r === 'rare' || r === 'epic' || r === 'legendary');
-    let outcome = null;
-    outcome = useStore.getState().mutate((p) =>
+    const outcome = useStore.getState().mutate((p) =>
       recordMatch(p, {
         holes: m.totalHoles,
         position: myRow.position,
@@ -742,137 +676,136 @@ export class MatchController implements View {
     this.setPhase('roundOver');
   }
 
-  // ------------------------------------------------------------------ camera
-  private snapCamera() {
-    this.computeDesired(0);
-    this.camPos.copy(this.desPos);
-    this.camLook.copy(this.desLook);
+  // ---------------------------------------------------------------- particles
+  private burst(x: number, y: number, z: number, kind: Burst, count: number) {
+    if (this.settings.quality === 'low') count = Math.ceil(count / 2);
+    const cols = BURST_COLORS[kind];
+    const h0 = Math.max(0, y - this.match.world.height(x, z));
+    for (let i = 0; i < count; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = kind === 'confetti' ? 2 + Math.random() * 6 : kind === 'sparkle' ? 0.5 + Math.random() * 2 : 1 + Math.random() * 3;
+      const up = kind === 'confetti' ? 5 + Math.random() * 7 : kind === 'splash' ? 3 + Math.random() * 4 : 1.5 + Math.random() * 2.5;
+      this.particles.push({
+        x, z, y: h0, vx: Math.cos(a) * sp, vz: Math.sin(a) * sp, vy: up,
+        life: 0, max: kind === 'confetti' ? 2.6 : 1.1, g: kind === 'confetti' ? 4 : kind === 'sparkle' ? 1 : 9.8,
+        c: cols[i % cols.length],
+      });
+    }
+    if (this.particles.length > 400) this.particles.splice(0, this.particles.length - 400);
   }
 
-  private computeDesired(dt: number) {
+  private updateParticles(dt: number) {
+    for (const p of this.particles) {
+      p.life += dt;
+      p.vy -= p.g * dt;
+      p.x += p.vx * dt;
+      p.z += p.vz * dt;
+      p.y = Math.max(0, p.y + p.vy * dt);
+      if (p.y === 0) { p.vx *= 0.8; p.vz *= 0.8; }
+    }
+    this.particles = this.particles.filter((p) => p.life < p.max);
+  }
+
+  // ------------------------------------------------------------------ camera
+  /** Part of the screen not covered by the HUD, in game pixels. */
+  private viewport() {
+    const W = this.W, H = this.H;
+    const portrait = H > W;
+    const top = portrait ? H * 0.2 : H * 0.2;
+    const bottom = portrait ? H * 0.4 : H * 0.22;
+    const left = portrait ? W * 0.06 : W * 0.08;
+    const right = portrait ? W * 0.06 : W * 0.24;
+    return { x0: left, x1: W - right, y0: top, y1: H - bottom };
+  }
+
+  /** Camera that fits the given map points inside the uncovered part of the screen. */
+  private fit(pts: Array<{ x: number; z: number; h?: number }>, minPpm: number, maxPpm: number, pad = 10): Camera {
+    const m = this.map!;
+    const vp = this.viewport();
+    let u0 = Infinity, u1 = -Infinity, w0 = Infinity, w1 = -Infinity;
+    for (const p of pts) {
+      const q = m.toMap(p.x, p.z);
+      u0 = Math.min(u0, q.u); u1 = Math.max(u1, q.u);
+      w0 = Math.min(w0, q.w); w1 = Math.max(w1, q.w + (p.h ?? 0) * HK);
+    }
+    const vw = Math.max(20, vp.x1 - vp.x0 - pad * 2), vh = Math.max(20, vp.y1 - vp.y0 - pad * 2);
+    const ppm = clamp(Math.min(vw / Math.max(1, u1 - u0), vh / Math.max(1, w1 - w0)), minPpm, maxPpm);
+    // centre of the uncovered area, converted back into a camera centre
+    const cu = (u0 + u1) / 2 - ((vp.x0 + vp.x1) / 2 - this.W / 2) / ppm;
+    let cw = (w0 + w1) / 2 + ((vp.y0 + vp.y1) / 2 - this.H / 2) / ppm;
+    // zoom limit reached: keep the first point (the ball) above the controls
+    const a = m.toMap(pts[0].x, pts[0].z);
+    const ay = (cw - a.w) * ppm + this.H / 2;
+    if (ay > vp.y1 - pad) cw -= (ay - (vp.y1 - pad)) / ppm;
+    return { u: cu, w: cw, ppm };
+  }
+
+  private computeDesired() {
     const m = this.match;
     const w = m.world;
+    const map = this.map!;
+    const pin = w.hole.pin;
     const p = m.players[this.cur];
-    const ball = new THREE.Vector3(p.ball.x, p.ball.y, p.ball.z);
-    const dir = new THREE.Vector3(Math.sin(this.aimYaw), 0, -Math.cos(this.aimYaw));
-    const club = p.bag[this.clubIdx] ?? p.bag[0];
-    const putt = isPutter(club);
     this.camLerp = 4;
     if (this.phase === 'intro') {
-      const pin = w.hole.pin;
-      const k = clamp(this.introT / 3.2, 0, 1);
-      const e = k * k * (3 - 2 * k);
-      const tee = w.hole.tee;
-      const pinV = new THREE.Vector3(pin.x, w.height(pin.x, pin.z), pin.z);
-      const teeV = new THREE.Vector3(tee.x, w.height(tee.x, tee.z), tee.z);
-      const back = teeV.clone().sub(pinV).setY(0).normalize();
-      const start = pinV.clone().addScaledVector(back, 40).add(new THREE.Vector3(0, 32, 0));
-      const end = teeV.clone().addScaledVector(back, 9).add(new THREE.Vector3(0, 3.2, 0));
-      const mid = pinV.clone().lerp(teeV, 0.5).add(new THREE.Vector3(0, 70 + w.hole.pathLen * 0.12, 0));
-      // quadratic bezier
-      const a = start.clone().lerp(mid, e);
-      const b = mid.clone().lerp(end, e);
-      this.desPos.copy(a.lerp(b, e));
-      this.desLook.copy(pinV.clone().lerp(teeV.clone().addScaledVector(back, -40), e));
-      this.camLerp = 20;
+      if (this.introT < 1.3) {
+        this.des = this.fit([pin, { x: pin.x, z: pin.z, h: 6 }], 5.5, 6, 30);
+      } else {
+        this.des = map.overview(this.W, this.H);
+        this.camLerp = 2.2;
+      }
       return;
     }
     if (this.flight) {
       const f = this.flight;
-      const pos = this.balls[f.pi].position;
-      const putt2 = isPutter(f.setup.club);
-      if (putt2) {
-        const side = new THREE.Vector3(-f.dir.z, 0, f.dir.x);
-        this.desPos.copy(new THREE.Vector3(f.setup.ball.x, f.setup.ball.y, f.setup.ball.z)).addScaledVector(f.dir, -3.2).addScaledVector(side, 1.3).add(new THREE.Vector3(0, 2.2, 0));
-        this.desPos.lerp(pos.clone().addScaledVector(f.dir, -3).addScaledVector(side, 1.0).add(new THREE.Vector3(0, 1.9, 0)), 0.5);
-        this.desLook.copy(pos);
-        this.camLerp = 3;
-        return;
-      }
-      const origin = new THREE.Vector3(f.setup.ball.x, f.setup.ball.y, f.setup.ball.z);
-      const flown = pos.distanceTo(origin);
-      const toLand = f.landing ? Math.hypot(pos.x - f.landing.x, pos.z - f.landing.z) : 999;
-      if (f.long && f.landing && (toLand < 60 || f.t > 0 && pos.y < f.landing.y + 6 && flown > 40)) {
-        // landing camera: off to the side of the landing zone, looking at the ball
-        const side = new THREE.Vector3(-f.dir.z, 0, f.dir.x);
-        this.desPos.copy(f.landing).addScaledVector(f.dir, 14).addScaledVector(side, 16).add(new THREE.Vector3(0, 7, 0));
-        this.desPos.y = Math.max(this.desPos.y, w.height(this.desPos.x, this.desPos.z) + 4);
-        this.desLook.copy(pos);
-        this.camLerp = 2.2;
-      } else {
-        this.desPos.copy(pos).addScaledVector(f.dir, -10).add(new THREE.Vector3(0, 3.5, 0));
-        this.desPos.y = Math.max(this.desPos.y, w.height(this.desPos.x, this.desPos.z) + 2);
-        this.desLook.copy(pos).addScaledVector(f.dir, 8);
-        this.camLerp = 5;
-      }
+      const b = this.flightBall ?? f.setup.ball;
+      const putt = isPutter(f.setup.club);
+      const h = Math.max(0, b.y - w.height(b.x, b.z));
+      this.des = this.fit([{ x: b.x, z: b.z, h }, f.final], putt ? 7 : 1, putt ? 16 : 7, putt ? 30 : 24);
+      this.camLerp = putt ? 3 : 2.5;
       return;
     }
-    if (this.phase === 'result' || this.phase === 'holeOver' || this.phase === 'roundOver') {
-      const b = this.balls[this.lastReport?.player ?? this.cur].position;
-      this.desLook.copy(b);
-      this.desPos.copy(b).addScaledVector(dir, -9).add(new THREE.Vector3(0, 4.5, 0));
-      if (this.phase !== 'result') {
-        const t = this.time * 0.15;
-        const pin = w.hole.pin;
-        const py = w.height(pin.x, pin.z);
-        this.desLook.set(pin.x, py, pin.z);
-        this.desPos.set(pin.x + Math.cos(t) * 22, py + 9, pin.z + Math.sin(t) * 22);
-      }
-      this.desPos.y = Math.max(this.desPos.y, w.height(this.desPos.x, this.desPos.z) + 1.5);
+    if (this.phase === 'result') {
+      const r = this.lastReport ? m.players[this.lastReport.player] : p;
+      const at = r.holed ? pin : r.ball;
+      this.des = this.fit([at], 5, 5, 0);
+      this.camLerp = 2;
+      return;
+    }
+    if (this.phase === 'holeOver' || this.phase === 'roundOver') {
+      this.des = this.fit([pin], 7, 7, 0);
       this.camLerp = 1.5;
       return;
     }
     // aiming / thinking / swinging
     let mode = this.camMode;
     if (p.isBot) mode = p.lie === 'green' || p.lie === 'fringe' ? 'green' : 'behind';
-    if (mode === 'behind') {
-      const big = club.def.category === 'driver' || club.def.category === 'wood';
-      const D = (putt ? 3.4 : big ? 6.5 : 5.2) * (this.portrait ? 1.25 : 1);
-      const H = (putt ? 1.5 : 2.3) * (this.portrait ? 1.3 : 1);
-      const right = new THREE.Vector3(-dir.z, 0, dir.x);
-      this.desPos.copy(ball).addScaledVector(dir, -D).addScaledVector(right, putt ? 0 : this.portrait ? -0.7 : 0.6).add(new THREE.Vector3(0, H, 0));
-      this.desLook.copy(ball).addScaledVector(dir, putt ? 3 : 25).addScaledVector(right, this.portrait && !putt ? -1.5 : 0).add(new THREE.Vector3(0, putt ? 0 : 3, 0));
-    } else if (mode === 'green') {
-      const pin = w.hole.pin;
-      const pinV = new THREE.Vector3(pin.x, w.height(pin.x, pin.z), pin.z);
-      const d = Math.max(3, ball.distanceTo(pinV));
-      this.desPos.copy(ball).addScaledVector(dir, -2.5 - d * 0.25).add(new THREE.Vector3(0, 1.4 + d * 0.22, 0));
-      this.desLook.copy(ball).lerp(pinV, 0.6);
-    } else if (mode === 'target') {
-      const L = this.preview ? new THREE.Vector3(this.preview.landing.x, this.preview.landing.y, this.preview.landing.z) : ball.clone().addScaledVector(dir, 100);
-      this.desPos.copy(L).addScaledVector(dir, -28).add(new THREE.Vector3(0, 32, 0));
-      this.desLook.copy(L);
-    } else {
-      const pin = w.hole.pin;
-      const mid = new THREE.Vector3((ball.x + pin.x) / 2, 0, (ball.z + pin.z) / 2);
-      const d = Math.hypot(ball.x - pin.x, ball.z - pin.z);
-      mid.y = w.height(mid.x, mid.z);
-      this.desPos.copy(mid).addScaledVector(dir, -d * 0.18).add(new THREE.Vector3(0, Math.max(40, d * 0.75), 0));
-      this.desLook.copy(mid);
+    const ball = p.ball;
+    const land = this.preview?.landing;
+    if (mode === 'overview') this.des = map.overview(this.W, this.H);
+    else if (mode === 'target' && land) this.des = this.fit([land], 6, 6, 0);
+    else if (mode === 'green') this.des = this.fit([ball, pin, ...(this.preview?.puttLine ? [this.preview.puttLine[this.preview.puttLine.length - 1]] : [])], 6, 16, 26);
+    else {
+      // the golfer and the landing zone both in view
+      const golferTop = { x: ball.x, z: ball.z, h: 7 };
+      this.des = this.fit(land ? [ball, golferTop, land, pin].slice(0, land && w.distToPin(land.x, land.z) < 40 ? 4 : 3) : [ball, golferTop, pin], 0.6, 7, 16);
     }
-    this.desPos.y = Math.max(this.desPos.y, w.height(this.desPos.x, this.desPos.z) + 0.8);
-    void dt;
   }
 
   // ------------------------------------------------------------------- loop
   update(dt: number, time: number) {
     if (this.disposed) return;
-    this.time = time;
-    if (!this.hole) {
-      this.camera.position.set(0, 50, 50);
-      return;
-    }
+    void time;
+    if (!this.map) return;
     if (this.phase === 'intro') {
       this.introT += dt;
       if (this.introT > 3.6) this.startTurn();
     }
     if (this.pulling) {
-      const club = this.currentClub();
       const tune = swingTuning(this.makeSetup(Math.max(0.05, this.power)));
       this.needlePhase += tune.needleSpeed * dt;
       this.needle = Math.sin(this.needlePhase);
       useSwing.setState({ needle: this.needle, perfectWindow: tune.perfectWindow, pulling: true });
-      void club;
       this.refreshAim(false);
     }
     if (this.flight) this.updateFlight(dt);
@@ -883,61 +816,226 @@ export class MatchController implements View {
       const wait = p.isBot ? (this.settings.botSpeed === 'normal' ? 2.0 : 1.1) : 1.8;
       if (this.resultTimer > wait) this.startTurn();
     }
-    for (const [, g] of this.golfers) if (g.root.visible) g.update(dt);
-    this.particles.update(dt);
-    this.hole.update(dt, time, this.match.wind);
-    // camera
-    this.computeDesired(dt);
+    this.golfers.get(this.cur)?.update(dt);
+    this.updateParticles(dt);
+    this.computeDesired();
     const k = 1 - Math.exp(-this.camLerp * dt);
-    this.camPos.lerp(this.desPos, k);
-    this.camLook.lerp(this.desLook, Math.min(1, k * 1.6));
-    this.camera.position.copy(this.camPos);
-    this.camera.lookAt(this.camLook);
-    // ball visibility scaling
-    this.balls.forEach((b) => {
-      const d = b.position.distanceTo(this.camPos);
-      const s = Math.max(1.6, d * 0.0042 / BALL_R);
-      b.scale.setScalar(Math.min(s, 30));
+    // zoom in log space so big zoom changes feel even
+    this.cam.ppm = Math.exp(Math.log(this.cam.ppm) + (Math.log(this.des.ppm) - Math.log(this.cam.ppm)) * k);
+    this.cam.u += (this.des.u - this.cam.u) * Math.min(1, k * 1.4);
+    this.cam.w += (this.des.w - this.cam.w) * Math.min(1, k * 1.4);
+  }
+
+  resize(w: number, h: number) {
+    this.W = w;
+    this.H = h;
+  }
+
+  // -------------------------------------------------------------------- draw
+  draw(px: Px, W: number, H: number, time: number) {
+    this.W = W;
+    this.H = H;
+    const map = this.map;
+    if (!map) {
+      px.rect(0, 0, W, H, '#124e89');
+      return;
+    }
+    const cam = this.cam;
+    const w = this.match.world;
+    const S = (x: number, z: number, h = 0) => map.toScreen(cam, W, H, x, z, h);
+    map.draw(px, cam, W, H, time);
+    const aiming = this.phase === 'aim';
+    const p = this.match.players[this.cur];
+    const putt = isPutter(this.currentClub());
+
+    // slope arrows on the green while putting
+    if (aiming && putt && this.settings.showSlopeGrid && cam.ppm >= 4.5) this.drawSlopes(px, W, H, time);
+
+    // cup and flag
+    const pin = w.hole.pin;
+    const pq = S(pin.x, pin.z);
+    if (cam.ppm >= 3) px.ellipse(pq.x, pq.y, Math.max(1, 0.11 * cam.ppm), Math.max(0.6, 0.07 * cam.ppm), INK);
+
+    // aim preview
+    if (aiming && this.preview) this.drawPreview(px, W, H, time, putt);
+
+    // trail
+    for (let i = 0; i < this.trail.length; i += 2) {
+      const t = this.trail[i];
+      const q = S(t.x, t.z, t.h);
+      px.dot(q.x, q.y, i > this.trail.length - 30 ? '#ffffff' : '#c0cbdc');
+    }
+
+    // other players' balls (flagged with their colour)
+    this.match.players.forEach((op, i) => {
+      if (i === this.cur || op.holed || op.pickedUp || !op.teedOff) return;
+      if (this.flight?.pi === i) return;
+      const q = S(op.ball.x, op.ball.z);
+      this.drawBall(px, q.x, q.y, q.y, cam.ppm);
+      const c = op.isBot ? op.color : '#3d9bff';
+      px.rect(q.x - 1, q.y - 6, 3, 3, INK);
+      px.dot(q.x, q.y - 5, c);
     });
-    const focus = this.flight ? this.balls[this.flight.pi].position : new THREE.Vector3(this.match.players[this.cur].ball.x, this.match.players[this.cur].ball.y, this.match.players[this.cur].ball.z);
-    this.hole.setFocus(focus);
-    this.updatePinLabel();
+
+    // flag pole (drawn after balls on the green so it stands on top)
+    const poleH = Math.max(10, 2.3 * cam.ppm * HK * 1.6);
+    px.rect(pq.x, pq.y - poleH, 1, poleH, '#f4f4f4');
+    const wave = Math.floor(time * 6) % 2;
+    const flagW = Math.max(4, Math.round(poleH * 0.45)), flagH = Math.max(3, Math.round(poleH * 0.28));
+    const windDir = Math.sign(Math.sin(this.windHud().angle)) || 1;
+    for (let r = 0; r < flagH; r++) {
+      const len = Math.round(flagW * (1 - r / (flagH * 1.6)));
+      px.rect(windDir > 0 ? pq.x + 1 : pq.x - len, pq.y - poleH + r + (r === 1 ? wave : 0), len, 1, w.hole.theme.flag);
+    }
+
+    // the golfer and their bag
+    const g = this.golfers.get(this.cur);
+    if (g && this.phase !== 'intro' && this.phase !== 'holeOver' && this.phase !== 'roundOver' && this.phase !== 'loading') this.drawGolferAt(px, W, H, g, p);
+
+    // the active ball
+    const fb = this.flightBall;
+    if (fb) {
+      const gh = w.height(fb.x, fb.z);
+      const hgt = Math.max(0, fb.y - gh);
+      const q = S(fb.x, fb.z, hgt);
+      const sh = S(fb.x, fb.z);
+      this.drawBall(px, q.x, q.y, sh.y, cam.ppm, hgt);
+    } else if (!p.holed && !p.pickedUp && this.phase !== 'intro') {
+      const q = S(p.ball.x, p.ball.z);
+      this.drawBall(px, q.x, q.y, q.y, cam.ppm);
+    }
+
+    // particles
+    for (const pa of this.particles) {
+      const q = S(pa.x, pa.z, pa.y);
+      px.dot(q.x, q.y, pa.c);
+    }
+
+    // distance to the pin above the flag
+    if (this.phase !== 'intro' || this.introT > 2.4) {
+      const b = fb ?? p.ball;
+      const d = w.distToPin(b.x, b.z);
+      const txt = d < 18 ? `${Math.round(d * 3.28)}FT` : `${Math.round(yd(d))}Y`;
+      if (pq.x > -20 && pq.x < W + 20 && pq.y > 0 && pq.y < H) px.text(txt, pq.x, pq.y - poleH - 10, '#ffffff', 'center', 8);
+    }
+  }
+
+  private drawBall(px: Px, x: number, y: number, groundY: number, ppm: number, height = 0) {
+    // the ball grows a little as it climbs, so it reads clearly in flight
+    const r = (ppm > 9 ? 1.5 : 1) + Math.min(1.5, height / 12);
+    if (height > 0.05) px.ellipse(x + 1, groundY + 1, 1.5, 0.6, 'rgba(10,20,20,0.45)');
+    else px.dot(x + 1, y + 1, 'rgba(10,20,20,0.5)');
+    if (r > 1) {
+      px.disc(x, y, r + 1, INK);
+      px.disc(x, y, r, '#ffffff');
+    } else {
+      px.rect(x - 1, y - 1, 3, 3, INK);
+      px.rect(x, y, 2, 2, '#ffffff');
+      px.dot(x + 1, y + 1, '#c0cbdc');
+    }
+  }
+
+  private drawGolferAt(px: Px, W: number, H: number, g: Golfer, p: PlayerState) {
+    const map = this.map!;
+    const cam = this.cam;
+    const at = this.stance;
+    const q = map.toScreen(cam, W, H, at.x, at.z);
+    // aim direction in screen terms (map u = right, w = up)
+    const a = { x: Math.sin(this.aimYaw), z: -Math.cos(this.aimYaw) };
+    const au = a.x * map.rx + a.z * map.rz, aw = a.x * map.fx + a.z * map.fz;
+    const yaw = Math.atan2(-au, aw);
+    const s = clamp(cam.ppm * 1.4, Math.min(W, H) / 11, Math.min(W, H) / 8);
+    const view = { x: 0, y: 0, s, yaw };
+    const pb = project({ x: g.ballOffset, y: 0.03, z: 0 }, view);
+    view.x = q.x - pb.x;
+    view.y = q.y - pb.y;
+    // bag a step behind the golfer
+    const bagP = project({ x: -0.55, y: 0, z: 0.55 }, view);
+    if (bagP.d < 0) drawBag(px, bagP.x, bagP.y, s, p.outfit);
+    drawGolfer(px, g.skeleton(), p.outfit, view, { color: g.club?.color ?? '#fff', category: g.club?.category ?? 'iron' });
+    if (bagP.d >= 0) drawBag(px, bagP.x, bagP.y, s, p.outfit);
+  }
+
+  private drawPreview(px: Px, W: number, H: number, time: number, putt: boolean) {
+    const map = this.map!;
+    const w = this.match.world;
+    const pv = this.preview!;
+    const S = (v: V3) => map.toScreen(this.cam, W, H, v.x, v.z, Math.max(0, v.y - w.height(v.x, v.z)));
+    // marching dots along the arc
+    const arc = pv.arc;
+    const off = Math.floor(time * 8) % 3;
+    let last = { x: -99, y: -99 };
+    let n = 0;
+    for (let i = 0; i < arc.length; i++) {
+      const q = S(arc[i]);
+      // evenly spaced on screen, marching toward the target
+      if (Math.hypot(q.x - last.x, q.y - last.y) < 4) continue;
+      last = q;
+      px.rect(q.x - 1, q.y - 1, 3, 3, 'rgba(24,20,37,0.55)');
+      px.rect(q.x, q.y, 2, 2, (n++ + 3 - off) % 3 === 0 ? '#feae34' : '#ffffff');
+    }
+    if (putt) {
+      if (pv.puttLine) for (let i = 0; i < pv.puttLine.length; i += 2) {
+        const q = S(pv.puttLine[i]);
+        px.dot(q.x, q.y, '#7affc8');
+      }
+      return;
+    }
+    // landing ellipse (lateral × long spread) around the predicted carry point
+    const L = pv.landing;
+    const dir = { x: Math.sin(this.aimYaw), z: -Math.cos(this.aimYaw) };
+    const side = { x: -dir.z, z: dir.x };
+    const segs = 28;
+    for (let i = 0; i < segs; i++) {
+      const t = (i / segs) * Math.PI * 2;
+      const x = L.x + side.x * Math.cos(t) * pv.spreadLat + dir.x * Math.sin(t) * pv.spreadLong;
+      const z = L.z + side.z * Math.cos(t) * pv.spreadLat + dir.z * Math.sin(t) * pv.spreadLong;
+      const q = map.toScreen(this.cam, W, H, x, z);
+      px.rect(q.x, q.y, 2, 2, i % 2 ? '#ffffff' : '#feae34');
+    }
+    const c = map.toScreen(this.cam, W, H, L.x, L.z);
+    px.rect(c.x - 2, c.y, 5, 1, '#ffffff');
+    px.rect(c.x, c.y - 2, 1, 5, '#ffffff');
+  }
+
+  private drawSlopes(px: Px, W: number, H: number, time: number) {
+    const map = this.map!;
+    const w = this.match.world;
+    const g = w.hole.green;
+    const step = 2.2;
+    const R = Math.max(g.rx, g.rz) + 2;
+    for (let du = -R; du <= R; du += step) {
+      for (let dw = -R; dw <= R; dw += step) {
+        const x = g.c.x + du, z = g.c.z + dw;
+        if (!map.onGreen(x, z)) continue;
+        const nrm = w.normal(x, z);
+        const sl = Math.hypot(nrm.x, nrm.z);
+        if (sl < 0.004) continue;
+        const k = Math.min(1, sl / 0.04);
+        // downhill direction on screen
+        const mu = nrm.x * map.rx + nrm.z * map.rz, mw = nrm.x * map.fx + nrm.z * map.fz;
+        const len = Math.hypot(mu, mw);
+        const dx = mu / len, dy = -mw / len;
+        const q = map.toScreen(this.cam, W, H, x, z);
+        const Lp = 2 + k * 4;
+        const c = k > 0.66 ? '#e43b44' : k > 0.33 ? '#feae34' : '#c0cbdc';
+        px.line(q.x, q.y, q.x + dx * Lp, q.y + dy * Lp, 'rgba(24,20,37,0.35)');
+        const ph = ((time * (0.6 + k)) % 1) * Lp;
+        px.dot(q.x + dx * ph, q.y + dy * ph, c);
+      }
+    }
   }
 
   private lowFpsT = 0;
   private fpsWarned = false;
   private fpsCheck(dt: number) {
-    if (this.fpsWarned || this.quality === 'low') return;
+    if (this.fpsWarned || host.pixelSize === 'chunky') return;
     if (host.fps < 22) this.lowFpsT += dt;
     else this.lowFpsT = Math.max(0, this.lowFpsT - dt);
     if (this.lowFpsT > 6) {
       this.fpsWarned = true;
-      useStore.getState().toast('The game is running slowly on this device. Try Graphics quality: Low in Settings.', 'bad', '🐢');
+      useStore.getState().toast('The game is running slowly on this device. Try Pixel size: Chunky in Settings.', 'bad', '🐢');
     }
-  }
-
-  private lastPinText = '';
-  private updatePinLabel() {
-    const p = this.match.players[this.cur];
-    const ballPos = this.flight ? this.balls[this.flight.pi].position : p.ball;
-    const d = this.match.world.distToPin(ballPos.x, ballPos.z);
-    const txt = d < 18 ? `⛳ ${Math.round(d * 3.28)} ft` : `⛳ ${Math.round(yd(d))} yd`;
-    if (txt !== this.lastPinText && (!this.flight || Math.floor(this.time * 4) % 2 === 0)) {
-      this.lastPinText = txt;
-      updateLabel(this.pinLabel, txt, 'rgba(20,30,40,0.75)');
-    }
-    this.pinLabel.visible = this.phase !== 'intro' || this.introT > 2.4;
-  }
-
-  private portrait = false;
-  /** Phones held upright get a wider vertical field of view so the target stays in frame. */
-  resize(w: number, h: number) {
-    this.portrait = h > w;
-    this.camera.fov = this.portrait ? 72 : 55;
-    // shift the picture up so the ball and golfer sit above the thumb controls
-    if (this.portrait) this.camera.setViewOffset(w, h, 0, h * 0.14, w, h);
-    else this.camera.clearViewOffset();
-    this.camera.updateProjectionMatrix();
   }
 
   /** Where the current shot preview lands (for the mini-map). */
@@ -946,37 +1044,20 @@ export class MatchController implements View {
     return { x: this.preview.landing.x, z: this.preview.landing.z };
   }
 
-  /** Screen → ground pick (for tap-to-aim on the course). */
-  pickGround(nx: number, ny: number): THREE.Vector3 | null {
-    if (!this.hole) return null;
-    const rc = new THREE.Raycaster();
-    rc.setFromCamera(new THREE.Vector2(nx, ny), this.camera);
-    const terrain = this.hole.terrain.group.getObjectByName('terrain');
-    if (!terrain) return null;
-    const hit = rc.intersectObject(terrain, false)[0];
-    return hit ? hit.point : null;
+  /** Screen (CSS client coordinates) → course point, for tap-to-aim. */
+  pickGround(clientX: number, clientY: number): { x: number; z: number } | null {
+    if (!this.map) return null;
+    const g = host.toGame(clientX, clientY);
+    return this.map.fromScreen(this.cam, this.W, this.H, g.x, g.y);
   }
 
   hudSnapshot(): HudState {
     return useHud.getState();
   }
 
-  forfeit() {
-    this.dispose();
-  }
-
   dispose() {
     if (this.disposed) return;
     this.disposed = true;
     if (this.botTimer) clearTimeout(this.botTimer);
-    this.hole?.dispose(this.scene);
-    for (const [, g] of this.golfers) g.dispose();
-    this.aimDots.dispose();
-    this.trueLine.dispose();
-  }
-
-  static attach(c: MatchController) {
-    host.setView(c);
   }
 }
-

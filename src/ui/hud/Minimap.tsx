@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import type { MatchController } from '../../game/matchController';
+import type { MatchController } from '../../game2d/match';
 import { useHud } from '../../state/matchStore';
 
 const SURF_COLORS: Record<string, string> = {};

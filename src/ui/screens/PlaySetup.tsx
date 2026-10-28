@@ -6,7 +6,7 @@ import { BAG_SLOTS, clubById, SLOT_LABEL } from '../../data/clubs';
 import { COURSES } from '../../data/courses';
 import { courseUnlocked, DIFFICULTY_UNLOCK, FEATURE_UNLOCKS, levelFromXp } from '../../data/progression';
 import type { MatchLength } from '../../golf/match';
-import type { MatchSetup } from '../../game/matchController';
+import type { MatchSetup } from '../../game2d/match';
 import { bagIssues, type Profile } from '../../state/profile';
 import { useStore } from '../../state/store';
 import { ClubIcon, TopBar } from '../components/common';
