@@ -316,7 +316,6 @@ function PauseMenu({ onResume, onQuit }: { onResume: () => void; onQuit: () => v
       <div style={{ marginTop: 10 }}>
         <div className="setting"><span>Sound effects</span><Toggle on={st.sfx} onChange={(v) => upd({ sfx: v })} /></div>
         <div className="setting"><span>Music</span><Toggle on={st.music} onChange={(v) => upd({ music: v })} /></div>
-        <div className="setting"><span>Opponent speed</span><Seg value={st.botSpeed} options={[['normal', 'Normal'], ['fast', 'Fast'], ['instant', 'Fastest']]} onChange={(v) => upd({ botSpeed: v })} /></div>
         <div className="setting"><span>Slope arrows</span><Toggle on={st.showSlopeGrid} onChange={(v) => upd({ showSlopeGrid: v })} /></div>
       </div>
       <div className="muted" style={{ fontSize: 13 }}>Keyboard: ←/→ aim, ↑/↓ club, C camera, Space skip, Esc pause.</div>

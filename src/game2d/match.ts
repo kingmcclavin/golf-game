@@ -105,7 +105,6 @@ export class MatchController implements View2D {
   private settings: Profile['settings'];
   private humanIdx = 0;
   private lastReport: ShotReport | null = null;
-  private botTimer: number | null = null;
   private W = 320;
   private H = 480;
   readonly setup: MatchSetup;
@@ -165,10 +164,13 @@ export class MatchController implements View2D {
     useHud.setState({ phase: p });
   }
 
-  private refreshPlayers() {
+  /** Bots' rows on the scoreboard, as of the end of the last hole (their shots aren't shown live). */
+  private botRows = new Map<number, HudState['players'][number]>();
+
+  private refreshPlayers(revealBots = false) {
     const m = this.match;
     useHud.setState({
-      players: m.players.map((p) => ({
+      players: m.players.map((p, i) => (p.isBot && !revealBots && this.botRows.has(i) ? this.botRows.get(i)! : {
         name: p.name,
         color: p.isBot ? p.color : '#3d9bff',
         isBot: p.isBot,
@@ -182,11 +184,17 @@ export class MatchController implements View2D {
       })),
       current: this.cur,
     });
+    if (revealBots || this.botRows.size === 0) useHud.getState().players.forEach((row, i) => row.isBot && this.botRows.set(i, { ...row, holeStrokes: 0, holed: false }));
   }
 
   // ------------------------------------------------------------------ turns
   startTurn() {
-    const pi = this.match.nextPlayer();
+    let pi = this.match.nextPlayer();
+    // opponents' shots are played instantly off screen; you only see their scores after each hole
+    for (let guard = 0; pi !== -1 && this.match.players[pi].isBot && guard < 300; guard++) {
+      this.playBotShot(pi);
+      pi = this.match.nextPlayer();
+    }
     if (pi === -1) {
       this.endHole();
       return;
@@ -205,38 +213,20 @@ export class MatchController implements View2D {
     useSwing.setState({ pulling: false, power: 0, needle: 0 });
     const onGreen = p.lie === 'green' || p.lie === 'fringe';
     this.camMode = onGreen ? 'green' : 'behind';
-    if (p.isBot) {
-      this.clubIdx = 0;
-      this.aimYaw = this.pinYaw(pi);
-      this.placeGolfer();
-      this.setPhase('botThink');
-      useHud.setState({ isHumanTurn: false, botThinking: `${p.name} is lining up...`, message: null, bag: [], camMode: this.camMode });
-      const delay = this.settings.botSpeed === 'instant' ? 120 : this.settings.botSpeed === 'fast' ? 350 : 800;
-      this.botTimer = window.setTimeout(() => this.botThink(), delay);
-    } else {
-      this.clubIdx = this.autoClubIdx(pi);
-      this.aimYaw = this.defaultAim(pi);
-      this.placeGolfer();
-      this.setPhase('aim');
-      const prevBot = this.lastReport ? this.match.players[this.lastReport.player].isBot : false;
-      useHud.setState({ isHumanTurn: true, botThinking: null, message: prevBot ? { text: 'Your shot', kind: 'neutral', id: msgId++ } : null, bag: this.bagHud(), camModes: this.camModes() });
-      this.refreshAim(true);
-    }
+    this.clubIdx = this.autoClubIdx(pi);
+    this.aimYaw = this.defaultAim(pi);
+    this.placeGolfer();
+    this.setPhase('aim');
+    useHud.setState({ isHumanTurn: true, botThinking: null, bag: this.bagHud(), camModes: this.camModes() });
+    this.refreshAim(true);
     this.refreshPlayers();
   }
 
-  private botThink() {
-    if (this.disposed || this.phase !== 'botThink') return;
-    const pi = this.cur;
-    const p = this.match.players[pi];
+  private playBotShot(pi: number) {
     const d = decideBotShot(this.match, pi, this.rng);
-    this.clubIdx = p.bag.indexOf(d.club);
-    this.aimYaw = d.aimYaw;
-    this.placeGolfer();
-    useHud.setState({ botThinking: `${p.name}: ${d.thinking}` });
-    const g = this.golfers.get(pi)!;
-    this.setPhase('swing');
-    g.autoSwing(isPutter(d.club) ? Math.min(1, d.power * 1.5) : d.power, () => this.fire(pi, botSetup(this.match, pi, d), d.needle));
+    const setup = botSetup(this.match, pi, d);
+    const { plan, result } = executeShot(this.match.world, setup, d.needle, this.match.nextSeed());
+    this.match.applyShot(pi, setup, plan, result);
   }
 
   private pinYaw(pi: number) {
@@ -510,7 +500,7 @@ export class MatchController implements View2D {
       useHud.setState({ message: msgs[0] });
       if (msgs[1]) setTimeout(() => !this.disposed && useHud.setState({ message: msgs[1] }), 800);
     }
-    const speed = p.isBot ? (this.settings.botSpeed === 'normal' ? 1.15 : this.settings.botSpeed === 'fast' ? 2.2 : 5) : 1.1;
+    const speed = 2.4;
     const n = result.frameCount - 1;
     const final = { x: result.frames[n * 3], y: result.frames[n * 3 + 1], z: result.frames[n * 3 + 2] };
     this.flight = { pi, setup, plan, result, t: 0, speed, evIdx: 0, done: false, doneT: 0, final };
@@ -563,7 +553,7 @@ export class MatchController implements View2D {
       }
     } else {
       f.doneT += dt;
-      if (f.doneT > (this.match.players[f.pi].isBot && this.settings.botSpeed !== 'normal' ? 0.25 : 0.5)) this.finishShot();
+      if (f.doneT > 0.3) this.finishShot();
     }
   }
 
@@ -620,8 +610,8 @@ export class MatchController implements View2D {
     const lines = COMMENTS[bucket];
     const lead = m.standings()[0];
     const leaderNote = lead.index === this.humanIdx ? 'You lead the match.' : `${lead.player.name} leads.`;
+    this.refreshPlayers(true);
     useHud.setState({ holeSummary: rows, commentary: `${lines[this.rng.int(0, lines.length - 1)]} ${leaderNote}` });
-    this.refreshPlayers();
     if (bucket === 'eagle' || bucket === 'birdie') sound.play('levelup');
     this.setPhase('holeOver');
   }
@@ -812,9 +802,7 @@ export class MatchController implements View2D {
     this.fpsCheck(dt);
     if (this.phase === 'result') {
       this.resultTimer += dt;
-      const p = this.match.players[this.lastReport?.player ?? 0];
-      const wait = p.isBot ? (this.settings.botSpeed === 'normal' ? 2.0 : 1.1) : 1.8;
-      if (this.resultTimer > wait) this.startTurn();
+      if (this.resultTimer > 1.3) this.startTurn();
     }
     this.golfers.get(this.cur)?.update(dt);
     this.updateParticles(dt);
@@ -865,17 +853,6 @@ export class MatchController implements View2D {
       const q = S(t.x, t.z, t.h);
       px.dot(q.x, q.y, i > this.trail.length - 30 ? '#ffffff' : '#c0cbdc');
     }
-
-    // other players' balls (flagged with their colour)
-    this.match.players.forEach((op, i) => {
-      if (i === this.cur || op.holed || op.pickedUp || !op.teedOff) return;
-      if (this.flight?.pi === i) return;
-      const q = S(op.ball.x, op.ball.z);
-      this.drawBall(px, q.x, q.y, q.y, cam.ppm);
-      const c = op.isBot ? op.color : '#3d9bff';
-      px.rect(q.x - 1, q.y - 6, 3, 3, INK);
-      px.dot(q.x, q.y - 5, c);
-    });
 
     // flag pole (drawn after balls on the green so it stands on top)
     const poleH = Math.max(10, 2.3 * cam.ppm * HK * 1.6);
@@ -1058,6 +1035,5 @@ export class MatchController implements View2D {
   dispose() {
     if (this.disposed) return;
     this.disposed = true;
-    if (this.botTimer) clearTimeout(this.botTimer);
   }
 }

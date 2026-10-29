@@ -46,9 +46,6 @@ export function SettingsScreen() {
         <div className="setting"><span>Graphics quality<div className="muted" style={{ fontSize: 12 }}>Low turns off water shimmer and thins particles for older phones. Current: {Math.round(host.fps)} fps</div></span>
           <Seg value={st.quality} options={[['low', 'Low'], ['medium', 'Medium'], ['high', 'High']]} onChange={(v) => upd({ quality: v })} />
         </div>
-        <div className="setting"><span>Opponent shot speed</span>
-          <Seg value={st.botSpeed} options={[['normal', 'Normal'], ['fast', 'Fast'], ['instant', 'Fastest']]} onChange={(v) => upd({ botSpeed: v })} />
-        </div>
         <div className="setting"><span>Haptic feedback<div className="muted" style={{ fontSize: 12 }}>Taps on swing, perfect strikes and holed putts (iPhone: iOS 18+)</div></span><Toggle on={st.haptics} onChange={(v) => upd({ haptics: v })} /></div>
         <div className="setting"><span>Green slope arrows</span><Toggle on={st.showSlopeGrid} onChange={(v) => upd({ showSlopeGrid: v })} /></div>
         <div className="setting"><span>Skip pack animations</span><Toggle on={st.fastPacks} onChange={(v) => upd({ fastPacks: v })} /></div>

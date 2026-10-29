@@ -70,6 +70,7 @@ Holes are generated from compact specs (par, length, doglegs, elevation, bunkers
 * score outcomes with a strokes-gained style expectation (distance, lie, hazards, trees) and weigh risk by personality;
 * search aim and pace for putts on the real green slopes;
 * then execute with skill-dependent timing/aim/power errors (plus occasional blunders for beginners), through the same shot code the player uses, club abilities included.
+* Their shots are played instantly off screen, so you only play your own ball; their scores appear in the hole summary and on the scoreboard after each hole.
 
 In automated rounds an expert typically shoots a few under par over nine holes and a beginner well over par.
 

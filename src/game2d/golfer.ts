@@ -165,7 +165,7 @@ export class Golfer {
 
   private impactPose(): Pose {
     const hands = v(0.41, 0.84, -0.06);
-    return { hipsYaw: 0.5, shoulderYaw: 0.22, bend: this.bend + 0.03, headYaw: -0.22, hands, shaft: norm(sub(this.ballPos(), hands)), legTurn: 0.4, hipShift: -0.04, heel: 0.1 };
+    return { hipsYaw: 0.5, shoulderYaw: 0.22, bend: this.bend + 0.03, headYaw: -0.22, hands, shaft: norm(sub(this.ballPos(), hands)), legTurn: 0 };
   }
 
   private backKeys(): Array<[number, Pose]> {
@@ -174,10 +174,9 @@ export class Golfer {
     });
     return [
       [0, this.addressPose()],
-      [0.3, P(-0.16, -0.55, [0.37, 0.9, 0.3], [0.12, -0.18, 1])],
-      [0.62, P(-0.45, -1.18, [0.24, 1.2, 0.44], [0.12, 1, 0.22], -0.12)],
-      [1.0, P(-0.78, -1.62, [0.12, 1.88, 0.26], [-0.22, 0.14, -1], -0.22)],
-      [1.12, P(-0.85, -1.8, [0.08, 1.9, 0.22], [-0.3, -0.25, -0.92], -0.26)],
+      [0.5, P(-0.35, -1.0, [0.28, 1.15, 0.42], [0.12, 1, 0.22])],
+      [1.0, P(-0.7, -1.6, [0.12, 1.85, 0.26], [-0.22, 0.14, -1])],
+      [1.12, P(-0.75, -1.75, [0.08, 1.9, 0.22], [-0.3, -0.25, -0.92])],
     ];
   }
 
@@ -187,9 +186,8 @@ export class Golfer {
     });
     return [
       [0, this.impactPose()],
-      [0.3, { ...P(0.95, 0.95, -0.36, -0.55, [0.35, 0.98, -0.38], [0.12, 0.02, -1], 0.75), hipShift: -0.08, heel: 0.35 }],
-      [0.62, { ...P(1.3, 1.5, -0.24, -0.5, [0.12, 1.42, -0.48], [0.0, 1, -0.25], 1.0), hipShift: -0.13, heel: 0.75 }],
-      [1.0, { ...P(1.55, 1.95, -0.06, 0, [-0.22, 1.74, -0.2], [-0.5, -0.5, 0.7], 1.2), hipShift: -0.16, heel: 1 }],
+      [0.5, P(1.1, 1.3, -0.3, -0.5, [0.18, 1.35, -0.48], [0.0, 1, -0.25], 0)],
+      [1.0, P(1.4, 1.8, -0.1, 0, [-0.22, 1.74, -0.2], [-0.5, -0.5, 0.7], 0)],
     ];
   }
 
@@ -298,13 +296,13 @@ export class Golfer {
       case 'celebrate': {
         const k = Math.min(1, this.phaseT / 0.3);
         const hop = Math.abs(Math.sin(this.phaseT * 8)) * 0.05 * k;
-        const up: Pose = { hipsYaw: 0.3, shoulderYaw: 0.4, bend: -0.1, headYaw: -0.2, hands: v(0.28, 1.85 + hop, -0.05), shaft: norm(v(0.1, 1, -0.3)), legTurn: 0.3 };
+        const up: Pose = { hipsYaw: 0.3, shoulderYaw: 0.4, bend: -0.1, headYaw: -0.2, hands: v(0.28, 1.85 + hop, -0.05), shaft: norm(v(0.1, 1, -0.3)), legTurn: 0 };
         this.current = this.mixPose(this.sample(this.followKeys(), this.followAmt), up, k);
         break;
       }
       case 'sad': {
         const k = Math.min(1, this.phaseT / 0.4);
-        const down: Pose = { hipsYaw: 0.2, shoulderYaw: 0.15, bend: -0.6, headYaw: Math.sin(this.time * 3) * 0.25, hands: v(0.36, 0.72, 0), shaft: norm(v(0.35, -1, 0.05)), legTurn: 0.1 };
+        const down: Pose = { hipsYaw: 0.2, shoulderYaw: 0.15, bend: -0.6, headYaw: Math.sin(this.time * 3) * 0.25, hands: v(0.36, 0.72, 0), shaft: norm(v(0.35, -1, 0.05)), legTurn: 0 };
         this.current = this.mixPose(this.sample(this.followKeys(), this.followAmt), down, k);
         break;
       }

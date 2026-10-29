@@ -126,6 +126,16 @@ export function drawGolfer(px: Px, sk: Skeleton, outfit: Outfit, view: SpriteVie
     const A = P(a), B = P(b);
     add((A.d + B.d) / 2 + extra, (o) => (o ? px.seg(A.x, A.y, B.x, B.y, R(r) + 1, INK) : px.seg(A.x, A.y, B.x, B.y, R(r), color)));
   };
+  /** One straight, unbroken limb: `upper` colour from the joint to `split`, `lower` colour beyond. */
+  const straight = (a: V, b: V, r: number, upper: string, lower: string, split: number) => {
+    const A = P(a), B = P(b);
+    const mx = A.x + (B.x - A.x) * split, my = A.y + (B.y - A.y) * split;
+    add((A.d + B.d) / 2, (o) => {
+      if (o) return px.seg(A.x, A.y, B.x, B.y, R(r) + 1, INK);
+      px.seg(A.x, A.y, B.x, B.y, R(r), lower);
+      if (split > 0) px.seg(A.x, A.y, mx, my, R(r), upper);
+    });
+  };
   const blob = (a: V, r: number, color: string, extra = 0) => {
     const A = P(a);
     add(A.d + extra, (o) => (o ? px.disc(A.x, A.y, R(r) + 1, INK) : px.disc(A.x, A.y, R(r), color)));
@@ -139,9 +149,7 @@ export function drawGolfer(px: Px, sk: Skeleton, outfit: Outfit, view: SpriteVie
   // legs and shoes
   for (let i = 0; i < 2; i++) {
     const legC = pants?.style === 'skirt' ? skin : pantsC;
-    limb(sk.hips[i], sk.knees[i], 0.08 * w, legC);
-    limb(sk.knees[i], sk.ankles[i], 0.065 * w, shorts ? skin : pantsC);
-    if (shorts) limb(sk.ankles[i], sk.ankles[i], 0.06, '#f4f4f4');
+    straight(sk.hips[i], sk.ankles[i], 0.075 * w, legC, shorts ? skin : pantsC, shorts ? 0.5 : 0);
     limb(sk.heels[i], sk.toes[i], 0.06, shoes?.color ?? '#ffffff', 0.01);
   }
   // torso (with a simple pattern stripe for patterned shirts)
@@ -167,8 +175,7 @@ export function drawGolfer(px: Px, sk: Skeleton, outfit: Outfit, view: SpriteVie
   if (acc?.style === 'towel') blob(sk.hips[0], 0.06, acc.color, 0.02);
   // arms (sleeves on the upper arm, skin or sleeve on the forearm)
   for (let i = 0; i < 2; i++) {
-    limb(sk.shoulders[i], sk.elbows[i], 0.06 * w, shirtC);
-    limb(sk.elbows[i], sk.hands[i], 0.05, longSleeve ? shirtC : skin);
+    straight(sk.shoulders[i], sk.hands[i], 0.055 * w, shirtC, longSleeve ? shirtC : skin, longSleeve ? 0 : 0.45);
     blob(sk.hands[i], 0.055, i === 0 && glove ? glove.color : skin, 0.03);
   }
   if (acc?.style === 'watch' || acc?.style === 'wristband') {
